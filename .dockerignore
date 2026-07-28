@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.pglite
+storage
+.env
+.env.local
+*.log
+npm-debug.log*
+.DS_Store
+README*.md
+DEPLOY.md

@@ -1,0 +1,53 @@
+# Production stack: the app + managed-style Postgres on one VPS.
+# Copy .env.production.example → .env and fill it in, then: docker compose up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-oqu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-oqu}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oqu} -d ${POSTGRES_DB:-oqu}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # App connects to the db service over the compose network.
+      DATABASE_URL: postgres://${POSTGRES_USER:-oqu}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-oqu}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      # Required — password-reset links are built from this, never from the
+      # request Host header (prevents reset-link poisoning).
+      APP_URL: ${APP_URL:?set APP_URL in .env (e.g. https://oqu.kz)}
+      TRUSTED_PROXY_COUNT: ${TRUSTED_PROXY_COUNT:-1}
+      # First-owner bootstrap (created once, then ignored).
+      BOOTSTRAP_OWNER_EMAIL: ${BOOTSTRAP_OWNER_EMAIL}
+      BOOTSTRAP_OWNER_PASSWORD: ${BOOTSTRAP_OWNER_PASSWORD}
+      BOOTSTRAP_OWNER_NAME: ${BOOTSTRAP_OWNER_NAME}
+      # Optional integrations.
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      MENTOR_MODEL: ${MENTOR_MODEL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      MAX_VIDEO_MB: ${MAX_VIDEO_MB}
+    volumes:
+      # Uploaded videos persist across redeploys.
+      - videos:/app/storage
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+volumes:
+  db-data:
+  videos:

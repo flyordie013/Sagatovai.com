@@ -1,34 +1,100 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OQU — образовательная AI-платформа (дизайн NOMAD NIGHT)
 
-## Getting Started
+Production-фундамент новой платформы: премиальная тёмная тема **NOMAD NIGHT**,
+студенческий кабинет с каталогом курсов, геймификацией и AI-наставником.
+«OQU» — рабочее название (плейсхолдер бренда).
 
-First, run the development server:
+## Стек
+
+| Слой | Технология |
+|---|---|
+| Framework | **Next.js 16** (App Router, RSC, Turbopack) |
+| Язык | **TypeScript** (strict) |
+| Стили | **Tailwind CSS v4** (design-токены в `globals.css`) |
+| Иконки | lucide-react |
+| Шрифты | Manrope + JetBrains Mono (`next/font`, сабсеты latin + **cyrillic**) |
+| БД / ORM | **Postgres** + **Drizzle ORM** (`postgres-js`) |
+| Иконки/утилиты | clsx + tailwind-merge |
+
+## Быстрый старт
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Открыть <http://localhost:3000>. Без `DATABASE_URL` приложение работает на
+встроенных seed-данных (слой `src/data/*`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## База данных (Postgres)
 
-## Learn More
+Схема описана в `src/db/schema.ts` (Drizzle). Начальная миграция —
+`drizzle/0000_init.sql`.
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cp .env.example .env.local        # укажите DATABASE_URL (Neon / Supabase / локальный PG)
+pnpm db:generate                  # сгенерировать миграцию из схемы
+pnpm db:migrate                   # применить миграции
+pnpm db:studio                    # веб-интерфейс Drizzle Studio
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Подключение живой БД — это замена реализации в `src/data/*` (контракт типов
+`src/types` не меняется, UI переписывать не нужно).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Архитектура кода
 
-## Deploy on Vercel
+```
+src/
+  app/
+    layout.tsx            # шрифты, метаданные, тема
+    globals.css           # дизайн-токены NOMAD NIGHT (@theme) + база
+    (app)/                # авторизованная зона (общая оболочка)
+      layout.tsx          # AppShell (сайдбар + топбар + контент)
+      page.tsx            # дашборд / каталог курсов
+      mentor|achievements|leaderboard|store|profile/  # разделы
+      course/[slug]/      # страница курса (async params — Next 16)
+  components/
+    ui/                   # Card, Badge, ProgressBar, ProgressRing
+    layout/               # Brand, Sidebar, Topbar, MobileDrawer, AppShell
+    dashboard/            # Hero, CourseCard, StatsStrip, AiMentorCard, ...
+  data/                   # слой доступа к данным (seed → Postgres)
+  db/                     # Drizzle schema + клиент
+  lib/                    # utils (cn, форматирование, плюрализация), nav
+  types/                  # доменные типы
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Дизайн-система (NOMAD NIGHT)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Тема — осознанно тёмная. Фон `#111218`, тёплое золото `#F5A524`, бирюза `#2DD4BF`.
+- Токены — CSS-переменные в `@theme` (`globals.css`); в компонентах используются
+  как Tailwind-утилиты (`bg-surface`, `text-gold`, `border-line`, `font-display`).
+- Доступность: видимый фокус, `aria`, поддержка `prefers-reduced-motion`.
+- Полностью адаптивно: сайдбар → выезжающее меню на мобильных.
+
+## Реализовано (Фаза 1)
+
+- Дизайн-система NOMAD NIGHT + шрифты с кириллицей.
+- Адаптивная оболочка: сайдбар (десктоп) + drawer (мобайл, Esc/overlay/фокус-лок).
+- Дашборд: герой, статистика, каталог курсов (доступ full/locked/флагман),
+  правый рейл (AI-наставник, уровень/XP, миссия дня).
+- Заглушки разделов и страница курса (без битых ссылок).
+- Postgres-схема (Drizzle) + миграция + скрипты.
+
+## Дальше (следующие фазы)
+
+Аутентификация (Auth.js) и RLS · подключение живой Postgres · страница курса
+(модули/уроки, видеоплеер, прогресс-гейтинг 80%) · чат AI-наставника · экраны
+геймификации · админка · онбординг. См. `../TZ-platform.md`.
+
+## Скрипты
+
+```bash
+pnpm dev          # dev-сервер (Turbopack)
+pnpm build        # production-сборка
+pnpm start        # запуск production-сборки
+pnpm typecheck    # tsc --noEmit
+pnpm lint         # eslint
+pnpm db:generate  # миграции из схемы
+pnpm db:migrate   # применить миграции
+pnpm db:studio    # Drizzle Studio
+```

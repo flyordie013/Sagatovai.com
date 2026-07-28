@@ -1,0 +1,182 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { and, eq, sql } from "drizzle-orm";
+import { getDb } from "@/db";
+import {
+  profiles,
+  lessonProgress,
+  missions,
+  userMissions,
+  achievements,
+  userAchievements,
+} from "@/db/schema";
+import { requireUser } from "@/lib/session";
+import { getLessonForStudent } from "@/data/course";
+import { levelForXp, rankForLevel, XP_PER_LESSON } from "@/lib/leveling";
+
+export interface CompleteResult {
+  ok: boolean;
+  error?: string;
+  alreadyCompleted?: boolean;
+  xpEarned?: number;
+  leveledUp?: boolean;
+  newLevel?: number;
+  newRank?: string;
+  achievements?: string[];
+  nextLessonId?: number | null;
+}
+
+/** Persist watched percentage (max wins). Called periodically by the player. */
+export async function saveProgress(lessonId: number, pct: number): Promise<void> {
+  const { userId } = await requireUser();
+  // Reject writes to foreign / locked / not-yet-unlocked lessons.
+  const info = await getLessonForStudent(lessonId, userId);
+  if (!info || !info.canView || !info.unlocked) return;
+  const clamped = Math.min(100, Math.max(0, Math.round(pct)));
+  const db = await getDb();
+  await db
+    .insert(lessonProgress)
+    .values({ userId, lessonId, watchedPct: clamped })
+    .onConflictDoUpdate({
+      target: [lessonProgress.userId, lessonProgress.lessonId],
+      set: { watchedPct: sql`greatest(${lessonProgress.watchedPct}, ${clamped})`, updatedAt: new Date() },
+    });
+}
+
+/** Day difference (calendar days) between two dates, floored to local midnight. */
+function calendarDayDiff(from: Date, to: Date): number {
+  const a = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime();
+  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
+  return Math.round((b - a) / 86_400_000);
+}
+
+export async function completeLesson(lessonId: number): Promise<CompleteResult> {
+  const { userId } = await requireUser();
+
+  const info = await getLessonForStudent(lessonId, userId);
+  if (!info) return { ok: false, error: "Урок не найден" };
+  if (!info.canView)
+    return { ok: false, error: "Этот урок доступен после покупки курса" };
+  if (!info.unlocked)
+    return { ok: false, error: "Сначала завершите предыдущий урок" };
+  if (info.completed)
+    return { ok: true, alreadyCompleted: true, xpEarned: 0, nextLessonId: info.nextLessonId };
+  // The watch-percentage gate is enforced client-side (the "Завершить" button stays
+  // disabled until threshold — or unlocks if the video fails to load, so a broken
+  // stream never traps the student). We don't hard-block here to avoid that trap.
+
+  const db = await getDb();
+  const now = new Date();
+
+  // 1) Atomically claim the completion. Ensure a row exists, then flip
+  //    completed false→true in a single UPDATE guarded by completed=false.
+  //    Only the request that wins the flip proceeds to award XP, so a
+  //    double-submit / race can never grant rewards twice.
+  await db
+    .insert(lessonProgress)
+    .values({ userId, lessonId, watchedPct: 100 })
+    .onConflictDoNothing({ target: [lessonProgress.userId, lessonProgress.lessonId] });
+  const claimed = await db
+    .update(lessonProgress)
+    .set({ watchedPct: 100, completed: true, completedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(lessonProgress.userId, userId),
+        eq(lessonProgress.lessonId, lessonId),
+        eq(lessonProgress.completed, false),
+      ),
+    )
+    .returning({ id: lessonProgress.id });
+  if (claimed.length === 0)
+    return { ok: true, alreadyCompleted: true, xpEarned: 0, nextLessonId: info.nextLessonId };
+
+  const [profile] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+  if (!profile) return { ok: false, error: "Профиль не найден" };
+
+  let xpGain = XP_PER_LESSON;
+
+  // 2) advance active missions
+  const active = await db
+    .select({
+      id: userMissions.id,
+      current: userMissions.current,
+      target: missions.target,
+      reward: missions.xpReward,
+    })
+    .from(userMissions)
+    .innerJoin(missions, eq(userMissions.missionId, missions.id))
+    .where(and(eq(userMissions.userId, userId), eq(userMissions.completed, false)));
+
+  for (const m of active) {
+    const next = Math.min(m.current + 1, m.target);
+    const done = next >= m.target;
+    await db.update(userMissions).set({ current: next, completed: done }).where(eq(userMissions.id, m.id));
+    if (done) xpGain += m.reward;
+  }
+
+  // 3) unlock lesson-count achievements
+  const [{ c: totalCompleted }] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(lessonProgress)
+    .where(and(eq(lessonProgress.userId, userId), eq(lessonProgress.completed, true)));
+
+  const catalog = await db.select().from(achievements);
+  const unlockedRows = await db
+    .select({ id: userAchievements.achievementId })
+    .from(userAchievements)
+    .where(eq(userAchievements.userId, userId));
+  const unlockedSet = new Set(unlockedRows.map((r) => r.id));
+
+  const newlyUnlocked: string[] = [];
+  for (const a of catalog) {
+    if (!unlockedSet.has(a.id) && a.target <= totalCompleted) {
+      const ins = await db
+        .insert(userAchievements)
+        .values({ userId, achievementId: a.id, progress: a.target, unlockedAt: now })
+        .onConflictDoNothing({ target: [userAchievements.userId, userAchievements.achievementId] })
+        .returning({ id: userAchievements.id });
+      if (ins.length === 0) continue; // another request already unlocked it
+      xpGain += a.xpReward;
+      newlyUnlocked.push(a.title);
+    }
+  }
+
+  // 4) xp / level / rank
+  const newXp = profile.xp + xpGain;
+  const oldLevel = levelForXp(profile.xp);
+  const newLevel = levelForXp(newXp);
+  const newRank = rankForLevel(newLevel);
+
+  // 5) streak
+  let streak = profile.currentStreak;
+  const diff = profile.lastActivityAt ? calendarDayDiff(profile.lastActivityAt, now) : null;
+  if (diff === null || diff >= 2) streak = 1;
+  else if (diff === 1) streak = profile.currentStreak + 1;
+  // diff === 0 → same day, unchanged
+  const longest = Math.max(profile.longestStreak, streak);
+
+  await db
+    .update(profiles)
+    .set({
+      xp: newXp,
+      level: newLevel,
+      rank: newRank,
+      currentStreak: streak,
+      longestStreak: longest,
+      lastActivityAt: now,
+    })
+    .where(eq(profiles.id, userId));
+
+  revalidatePath("/dashboard");
+
+  return {
+    ok: true,
+    xpEarned: xpGain,
+    leveledUp: newLevel > oldLevel,
+    newLevel,
+    newRank,
+    achievements: newlyUnlocked,
+    nextLessonId: info.nextLessonId,
+  };
+}

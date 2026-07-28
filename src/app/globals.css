@@ -1,1 +1,112 @@
 @import "tailwindcss";
+
+/* ============================================================
+   NOMAD NIGHT — design tokens (Tailwind v4 @theme)
+   Premium warm-night dark theme. Deliberately dark-only.
+   ============================================================ */
+@theme {
+  /* type */
+  --font-sans: var(--font-manrope), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-manrope), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* surfaces */
+  --color-ink: #111218;
+  --color-ink-2: #0d0e13;
+  --color-surface: #191b24;
+  --color-raised: #20222e;
+  --color-raised-2: #262838;
+  --color-line: #23242e;
+  --color-line-strong: #30313c;
+
+  /* text */
+  --color-text: #f4f2ec;
+  --color-muted: #9a9aa6;
+  --color-faint: #6b6b76;
+
+  /* accents */
+  --color-gold: #f5a524;
+  --color-gold-soft: #f7b94e;
+  --color-gold-ink: #1a1206;
+  --color-teal: #2dd4bf;
+
+  /* semantic */
+  --color-danger: #f0787c;
+  --color-success: #4ec98a;
+
+  /* elevation */
+  --shadow-card: 0 18px 40px -28px rgba(0, 0, 0, 0.95);
+  --shadow-pop: 0 24px 60px -24px rgba(0, 0, 0, 0.95);
+  --shadow-glow: 0 0 28px -6px rgba(245, 165, 36, 0.5);
+
+  /* motion */
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  body {
+    min-height: 100dvh;
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    background:
+      radial-gradient(120% 90% at 80% -10%, rgba(245, 165, 36, 0.1), transparent 46%),
+      radial-gradient(90% 70% at -8% 2%, rgba(45, 212, 191, 0.05), transparent 52%),
+      var(--color-ink);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgba(245, 165, 36, 0.28);
+    color: #fff;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3d3f4b;
+    background-clip: content-box;
+  }
+}
+
+@layer utilities {
+  .nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+  .ring-inset-hair {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

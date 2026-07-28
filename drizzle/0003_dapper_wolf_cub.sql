@@ -1,0 +1,2 @@
+CREATE TYPE "public"."redemption_status" AS ENUM('pending', 'fulfilled', 'cancelled');--> statement-breakpoint
+ALTER TABLE "redemptions" ADD COLUMN "status" "redemption_status" DEFAULT 'pending' NOT NULL;
