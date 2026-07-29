@@ -16,14 +16,47 @@ const jetbrains = JetBrains_Mono({
   weight: ["400", "500", "600"],
 });
 
+const TITLE = "OQU — образовательная платформа с AI-наставником";
+const DESCRIPTION =
+  "Изучай AI и собирай реальные проекты: курсы, персональный AI-наставник, геймификация обучения.";
+
+/**
+ * Absolute base for og:url / canonical / OG image links. Read from APP_URL
+ * (baked in at build time by the Dockerfile); a malformed value must not take
+ * the whole app down at import time, hence the fallback.
+ */
+function siteUrl(): URL {
+  const fallback = "https://sagatovai.com";
+  try {
+    return new URL(process.env.APP_URL || fallback);
+  } catch {
+    return new URL(fallback);
+  }
+}
+
 export const metadata: Metadata = {
+  metadataBase: siteUrl(),
   title: {
-    default: "OQU — образовательная платформа с AI-наставником",
+    default: TITLE,
     template: "%s · OQU",
   },
-  description:
-    "Изучай AI и собирай реальные проекты: курсы, персональный AI-наставник, геймификация обучения.",
+  description: DESCRIPTION,
   applicationName: "OQU",
+  // Link previews in WhatsApp/Telegram. The image itself comes from
+  // app/opengraph-image.tsx — Next.js appends it to both card types.
+  openGraph: {
+    type: "website",
+    siteName: "OQU",
+    locale: "ru_RU",
+    url: "/",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
 export const viewport: Viewport = {

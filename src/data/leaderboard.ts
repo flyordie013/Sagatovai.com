@@ -1,8 +1,9 @@
 import "server-only";
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { profiles, lessonProgress } from "@/db/schema";
 import { levelProgress } from "@/lib/leveling";
+import { effectiveStreak } from "@/lib/streak";
 
 export interface LeaderboardRow {
   id: string;
@@ -41,13 +42,19 @@ export async function getLeaderboard(
       fullName: profiles.fullName,
       xp: profiles.xp,
       streak: profiles.currentStreak,
+      lastActivityAt: profiles.lastActivityAt,
       completed: sql<number>`count(${lessonProgress.id}) filter (where ${lessonProgress.completed} = true)::int`,
     })
     .from(profiles)
     .leftJoin(lessonProgress, eq(lessonProgress.userId, profiles.id))
     .where(eq(profiles.role, "student"))
     .groupBy(profiles.id)
-    .orderBy(desc(profiles.xp))
+    // XP alone is not a total order: with an empty base everyone sits on 0 XP
+    // and Postgres is free to return them in any order, so the board reshuffles
+    // between requests. Registration date (then id) makes it deterministic and
+    // puts the earlier student ahead on a tie. Must stay in sync with the
+    // "students ahead of me" count in getLeaderboardWithSelf().
+    .orderBy(desc(profiles.xp), asc(profiles.createdAt), asc(profiles.id))
     .limit(TOP_LIMIT);
 
   return rows.map((r) => {
@@ -58,7 +65,7 @@ export async function getLeaderboard(
       level: lp.level,
       rank: lp.rank,
       xp: r.xp,
-      streak: r.streak,
+      streak: effectiveStreak(r.streak, r.lastActivityAt),
       completed: r.completed ?? 0,
       isCurrentUser: r.id === currentUserId,
     };
@@ -91,6 +98,8 @@ export async function getLeaderboardWithSelf(
       fullName: profiles.fullName,
       xp: profiles.xp,
       streak: profiles.currentStreak,
+      lastActivityAt: profiles.lastActivityAt,
+      createdAt: profiles.createdAt,
       role: profiles.role,
       completed: sql<number>`count(${lessonProgress.id}) filter (where ${lessonProgress.completed} = true)::int`,
     })
@@ -102,10 +111,26 @@ export async function getLeaderboardWithSelf(
   // Staff aren't ranked, so they simply have no standing to show.
   if (!me || me.role !== "student") return { top, self: null, totalStudents };
 
+  // Everyone strictly ahead of me under the SAME order the top list uses.
+  // Counting `xp > me.xp` alone told every student on 0 XP they were 1-й —
+  // on an empty platform that's the whole base.
   const [ahead] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(profiles)
-    .where(and(eq(profiles.role, "student"), gt(profiles.xp, me.xp)));
+    .where(
+      and(
+        eq(profiles.role, "student"),
+        or(
+          gt(profiles.xp, me.xp),
+          and(eq(profiles.xp, me.xp), lt(profiles.createdAt, me.createdAt)),
+          and(
+            eq(profiles.xp, me.xp),
+            eq(profiles.createdAt, me.createdAt),
+            lt(profiles.id, me.id),
+          ),
+        ),
+      ),
+    );
 
   const lp = levelProgress(me.xp);
   return {
@@ -116,7 +141,7 @@ export async function getLeaderboardWithSelf(
       level: lp.level,
       rank: lp.rank,
       xp: me.xp,
-      streak: me.streak,
+      streak: effectiveStreak(me.streak, me.lastActivityAt),
       completed: me.completed ?? 0,
       isCurrentUser: true,
       position: (ahead?.n ?? 0) + 1,

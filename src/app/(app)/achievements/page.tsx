@@ -45,8 +45,13 @@ function iconFor(code: string): LucideIcon {
   return Trophy;
 }
 
-function AchievementCard({ item }: { item: AchievementItem }) {
-  const Icon = iconFor(item.code);
+function AchievementCard({
+  item,
+  icon: Icon,
+}: {
+  item: AchievementItem;
+  icon: LucideIcon;
+}) {
 
   return (
     <Card
@@ -163,13 +168,17 @@ export default async function AchievementsPage() {
           </div>
           <p className="font-display text-lg font-bold">Достижений пока нет</p>
           <p className="max-w-sm text-sm text-muted">
-            Проходи уроки — здесь появятся бейджи и награды за твой прогресс.
+            Проходите уроки — здесь появятся бейджи и награды за ваш прогресс.
           </p>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => (
-            <AchievementCard key={item.code} item={item} />
+            <AchievementCard
+              key={item.code}
+              item={item}
+              icon={iconFor(item.code)}
+            />
           ))}
         </div>
       )}

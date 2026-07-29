@@ -3,13 +3,16 @@
 import { useState, type ReactNode } from "react";
 import { Menu } from "lucide-react";
 import { MobileDrawer } from "@/components/layout/mobile-drawer";
+import type { AdminBadgeKey } from "@/lib/admin-nav";
 import { AdminSidebarContent } from "./admin-sidebar-content";
 
 export function AdminShell({
   ownerName,
+  counts,
   children,
 }: {
   ownerName: string;
+  counts?: Partial<Record<AdminBadgeKey, number>>;
   children: ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -17,7 +20,7 @@ export function AdminShell({
   return (
     <div className="lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="sticky top-0 hidden h-dvh w-full border-r border-line bg-gradient-to-b from-surface/60 to-ink/20 lg:block">
-        <AdminSidebarContent />
+        <AdminSidebarContent counts={counts} />
       </aside>
 
       <div className="flex min-h-dvh min-w-0 flex-col">
@@ -43,7 +46,7 @@ export function AdminShell({
       </div>
 
       <MobileDrawer open={menuOpen} onClose={() => setMenuOpen(false)}>
-        <AdminSidebarContent onNavigate={() => setMenuOpen(false)} />
+        <AdminSidebarContent counts={counts} onNavigate={() => setMenuOpen(false)} />
       </MobileDrawer>
     </div>
   );

@@ -19,14 +19,14 @@ export function AiMentorCard() {
         </div>
       </div>
       <p className="relative mt-4 text-sm text-muted">
-        Спроси меня о чём угодно — разберём ошибку в коде или доведём проект до
+        Спросите меня о чём угодно — разберём ошибку в коде или доведём проект до
         конца.
       </p>
       <Link
         href="/mentor"
         className="relative mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gold px-4 py-2.5 text-sm font-semibold text-gold-ink shadow-glow transition-colors hover:bg-gold-soft"
       >
-        Спроси меня о чём угодно
+        Спросите меня о чём угодно
         <ArrowRight className="size-4" />
       </Link>
     </Card>

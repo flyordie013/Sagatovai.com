@@ -12,6 +12,7 @@ import {
   userAchievements,
 } from "@/db/schema";
 import { requireUser } from "@/lib/session";
+import { courseVisibleToStudent } from "./course";
 import { getCurrentUser } from "./user";
 import type { CourseIcon, CourseSummary, DashboardData, Mission } from "@/types";
 
@@ -20,9 +21,10 @@ export async function getDashboard(): Promise<DashboardData> {
   const { userId: uid } = await requireUser();
   const user = await getCurrentUser();
 
-  // Every published course, with this user's enrollment attached when it exists.
-  // A LEFT JOIN (not INNER) so courses the student hasn't bought yet still show
-  // up in the catalog — otherwise a paid course would be undiscoverable.
+  // Every course the student may see, with their enrollment attached when it
+  // exists. A LEFT JOIN (not INNER) so courses the student hasn't bought yet
+  // still show up in the catalog — otherwise a paid course would be
+  // undiscoverable — and so `courseVisibleToStudent()` can read `access_type`.
   const enrolled = await db
     .select({
       id: courses.id,
@@ -41,7 +43,7 @@ export async function getDashboard(): Promise<DashboardData> {
       enrollments,
       and(eq(enrollments.courseId, courses.id), eq(enrollments.userId, uid)),
     )
-    .where(and(eq(courses.isPublished, true), eq(courses.isArchived, false)))
+    .where(courseVisibleToStudent())
     .orderBy(courses.orderIndex);
 
   const totals = await db

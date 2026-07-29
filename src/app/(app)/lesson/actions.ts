@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   profiles,
@@ -14,6 +14,7 @@ import {
 import { requireUser } from "@/lib/session";
 import { getLessonForStudent } from "@/data/course";
 import { levelForXp, rankForLevel, XP_PER_LESSON } from "@/lib/leveling";
+import { calendarDayDiff } from "@/lib/streak";
 
 export interface CompleteResult {
   ok: boolean;
@@ -42,13 +43,6 @@ export async function saveProgress(lessonId: number, pct: number): Promise<void>
       target: [lessonProgress.userId, lessonProgress.lessonId],
       set: { watchedPct: sql`greatest(${lessonProgress.watchedPct}, ${clamped})`, updatedAt: new Date() },
     });
-}
-
-/** Day difference (calendar days) between two dates, floored to local midnight. */
-function calendarDayDiff(from: Date, to: Date): number {
-  const a = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime();
-  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
-  return Math.round((b - a) / 86_400_000);
 }
 
 export async function completeLesson(lessonId: number): Promise<CompleteResult> {
@@ -106,7 +100,15 @@ export async function completeLesson(lessonId: number): Promise<CompleteResult> 
     })
     .from(userMissions)
     .innerJoin(missions, eq(userMissions.missionId, missions.id))
-    .where(and(eq(userMissions.userId, userId), eq(userMissions.completed, false)));
+    .where(
+      and(
+        eq(userMissions.userId, userId),
+        eq(userMissions.completed, false),
+        // A mission the owner switched off must stop paying out: the dashboard
+        // already hides it, so its reward would be XP from nowhere.
+        eq(missions.isActive, true),
+      ),
+    );
 
   for (const m of active) {
     const next = Math.min(m.current + 1, m.target);
@@ -122,24 +124,39 @@ export async function completeLesson(lessonId: number): Promise<CompleteResult> 
     .where(and(eq(lessonProgress.userId, userId), eq(lessonProgress.completed, true)));
 
   const catalog = await db.select().from(achievements);
-  const unlockedRows = await db
-    .select({ id: userAchievements.achievementId })
+  // Earned = a ledger row that actually carries `unlockedAt`. A row without it
+  // is progress only and must not count as unlocked, or the achievement would
+  // be shut out forever.
+  const ledger = await db
+    .select({
+      id: userAchievements.achievementId,
+      unlockedAt: userAchievements.unlockedAt,
+    })
     .from(userAchievements)
     .where(eq(userAchievements.userId, userId));
-  const unlockedSet = new Set(unlockedRows.map((r) => r.id));
+  const earned = new Set(ledger.filter((r) => r.unlockedAt !== null).map((r) => r.id));
 
   const newlyUnlocked: string[] = [];
   for (const a of catalog) {
-    if (!unlockedSet.has(a.id) && a.target <= totalCompleted) {
-      const ins = await db
-        .insert(userAchievements)
-        .values({ userId, achievementId: a.id, progress: a.target, unlockedAt: now })
-        .onConflictDoNothing({ target: [userAchievements.userId, userAchievements.achievementId] })
-        .returning({ id: userAchievements.id });
-      if (ins.length === 0) continue; // another request already unlocked it
-      xpGain += a.xpReward;
-      newlyUnlocked.push(a.title);
-    }
+    // Compared against the CURRENT completed count, not just the moment the
+    // target is crossed — an achievement the owner adds later is awarded to
+    // students who are already past it instead of staying locked forever.
+    if (earned.has(a.id) || a.target > totalCompleted) continue;
+    // Insert, or claim a row that exists but was never unlocked. `setWhere`
+    // keeps it race-safe: a concurrent request that already stamped
+    // `unlockedAt` updates nothing and gets no row back, so XP is paid once.
+    const ins = await db
+      .insert(userAchievements)
+      .values({ userId, achievementId: a.id, progress: a.target, unlockedAt: now })
+      .onConflictDoUpdate({
+        target: [userAchievements.userId, userAchievements.achievementId],
+        set: { progress: a.target, unlockedAt: now },
+        setWhere: isNull(userAchievements.unlockedAt),
+      })
+      .returning({ id: userAchievements.id });
+    if (ins.length === 0) continue; // another request already unlocked it
+    xpGain += a.xpReward;
+    newlyUnlocked.push(a.title);
   }
 
   // 4) xp / level / rank
@@ -148,7 +165,8 @@ export async function completeLesson(lessonId: number): Promise<CompleteResult> 
   const newLevel = levelForXp(newXp);
   const newRank = rankForLevel(newLevel);
 
-  // 5) streak
+  // 5) streak — days are counted in Asia/Almaty, never in the process timezone
+  //    (a UTC container would end the student's day at 05:00 local).
   let streak = profile.currentStreak;
   const diff = profile.lastActivityAt ? calendarDayDiff(profile.lastActivityAt, now) : null;
   if (diff === null || diff >= 2) streak = 1;

@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/session";
 import { getLessonForStudent } from "@/data/course";
 import { LessonPlayer } from "@/components/lesson/lesson-player";
 import { Card } from "@/components/ui/card";
+import { RichText } from "@/components/ui/rich-text";
 
 export const metadata = { title: "Урок" };
 
@@ -92,9 +93,7 @@ export default async function LessonPage({
                 <FileText className="size-3.5" />
                 Материалы урока
               </p>
-              <p className="whitespace-pre-line break-words text-sm leading-relaxed text-muted">
-                {lesson.content}
-              </p>
+              <RichText text={lesson.content} className="text-muted" />
             </Card>
           )}
 
@@ -104,7 +103,7 @@ export default async function LessonPage({
               <Bot className="size-5" strokeWidth={1.8} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Не понятно? Спроси AI-наставника</p>
+              <p className="text-sm font-semibold">Не понятно? Спросите AI-наставника</p>
               <p className="text-xs text-muted">Объяснит тему урока простыми словами</p>
             </div>
             <Link

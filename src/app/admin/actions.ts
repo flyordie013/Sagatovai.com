@@ -10,11 +10,13 @@ import {
   modules,
   lessons,
   enrollments,
+  lessonProgress,
   payments,
   profiles,
   missions,
   userMissions,
   achievements,
+  userAchievements,
   storeItems,
   redemptions,
   leads,
@@ -23,6 +25,7 @@ import { requireStaff } from "@/lib/session";
 import { hashPassword } from "@/lib/password";
 import { provisionNewStudent } from "@/lib/provision";
 import { deleteVideo } from "@/lib/storage";
+import { levelForXp, rankForLevel } from "@/lib/leveling";
 import { MIN_PASSWORD } from "@/lib/auth-rules";
 
 /** Removes uploaded video files for a set of storage keys (best-effort). */
@@ -68,6 +71,26 @@ async function nextOrderIndex(
   return (row?.v ?? -1) + 1;
 }
 
+/** Same idea for courses — they have no parent, so the whole table is the list. */
+async function nextCourseOrderIndex(): Promise<number> {
+  const db = await getDb();
+  const [row] = await db
+    .select({ v: sql<number>`coalesce(max(${courses.orderIndex}), -1)::int` })
+    .from(courses);
+  return (row?.v ?? -1) + 1;
+}
+
+/** Lessons in a course, across all its modules. */
+async function countLessons(courseId: number): Promise<number> {
+  const db = await getDb();
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(lessons)
+    .innerJoin(modules, eq(lessons.moduleId, modules.id))
+    .where(eq(modules.courseId, courseId));
+  return row?.n ?? 0;
+}
+
 function revalidateCourse(courseId: number) {
   revalidatePath("/admin");
   revalidatePath("/admin/courses");
@@ -101,8 +124,11 @@ export async function createCourse(formData: FormData): Promise<void> {
       weeks: int(formData, "weeks"),
       price: int(formData, "price"),
       flagship: bool(formData, "flagship"),
-      isPublished: bool(formData, "isPublished"),
-      orderIndex: 999,
+      // A brand-new course is always a DRAFT: it has no lessons yet, and a
+      // published free course would immediately hand every new student a
+      // permanent enrollment to an empty shell (see provisionNewStudent).
+      isPublished: false,
+      orderIndex: await nextCourseOrderIndex(),
     })
     .returning({ id: courses.id });
 
@@ -125,7 +151,11 @@ export async function updateCourse(formData: FormData): Promise<void> {
     .from(courses)
     .where(eq(courses.id, id))
     .limit(1);
-  const isPublished = existing?.isArchived ? false : bool(formData, "isPublished");
+  const wantsPublish = existing?.isArchived ? false : bool(formData, "isPublished");
+  // Same rule as togglePublish — an empty course must not reach the storefront,
+  // whichever control the owner used to publish it.
+  const empty = wantsPublish && (await countLessons(id)) === 0;
+  const isPublished = wantsPublish && !empty;
 
   // Optional slug edit — slugified, kept unique (excluding this course), and
   // only applied when non-empty so a blank field never wipes the URL.
@@ -156,6 +186,7 @@ export async function updateCourse(formData: FormData): Promise<void> {
     .where(eq(courses.id, id));
 
   revalidateCourse(id);
+  if (empty) redirect(`/admin/courses/${id}?error=no-lessons`);
 }
 
 export async function togglePublish(formData: FormData): Promise<void> {
@@ -163,10 +194,42 @@ export async function togglePublish(formData: FormData): Promise<void> {
   const db = await getDb();
   const id = int(formData, "courseId");
   if (!id) return;
-  await db
-    .update(courses)
-    .set({ isPublished: bool(formData, "next") })
-    .where(eq(courses.id, id));
+  const next = bool(formData, "next");
+
+  // Publishing a course without a single lesson puts an empty card on the
+  // storefront; if it's also free, every new student gets a permanent
+  // enrollment to nothing. Refuse and say why instead of silently doing it.
+  if (next && (await countLessons(id)) === 0) {
+    redirect(`/admin/courses/${id}?error=no-lessons`);
+  }
+
+  await db.update(courses).set({ isPublished: next }).where(eq(courses.id, id));
+  revalidateCourse(id);
+}
+
+/** Moves a course up/down in the storefront order (position-reindex). */
+export async function moveCourse(formData: FormData): Promise<void> {
+  await requireStaff();
+  const db = await getDb();
+  const id = int(formData, "courseId");
+  const dir = str(formData, "dir");
+  if (!id || (dir !== "up" && dir !== "down")) return;
+
+  const sibs = await db
+    .select({ id: courses.id })
+    .from(courses)
+    .orderBy(asc(courses.orderIndex), asc(courses.id));
+  const idx = sibs.findIndex((c) => c.id === id);
+  const swap = dir === "up" ? idx - 1 : idx + 1;
+  if (idx === -1 || swap < 0 || swap >= sibs.length) return;
+
+  const order = sibs.map((c) => c.id);
+  [order[idx], order[swap]] = [order[swap], order[idx]];
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < order.length; i++) {
+      await tx.update(courses).set({ orderIndex: i }).where(eq(courses.id, order[i]));
+    }
+  });
   revalidateCourse(id);
 }
 
@@ -176,14 +239,15 @@ export async function deleteCourse(formData: FormData): Promise<void> {
   const id = int(formData, "courseId");
   if (!id) return;
 
-  // A course with payment history is ARCHIVED, not deleted — a hard delete would
-  // cascade its payments away and silently erase booked revenue. Archived
-  // courses are hidden from students but keep their sales records. Empty
-  // (never-sold) courses are deleted outright.
+  // A course with SALES is ARCHIVED, not deleted — a hard delete would cascade
+  // its payments away and silently erase booked revenue. Archived courses are
+  // hidden from students but keep their sales records.
+  // Only `paid` rows count: an open or declined request never brought money in,
+  // so a single rejected request must not make the course undeletable forever.
   const [{ n: paid }] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(payments)
-    .where(eq(payments.courseId, id));
+    .where(and(eq(payments.courseId, id), eq(payments.status, "paid")));
 
   if (paid > 0) {
     // Archived — keep the content (and its video files) intact.
@@ -465,23 +529,94 @@ export async function deleteMission(formData: FormData): Promise<void> {
   revalidateGamification();
 }
 
+/**
+ * Unlocks an achievement for everyone who ALREADY passed its target.
+ *
+ * `completeLesson` only evaluates achievements when a lesson is finished, so an
+ * achievement added (or lowered) after students have progressed would stay
+ * locked until their next lesson — and for someone who finished the course, for
+ * ever. XP/level/rank are granted here exactly like the runtime path does.
+ */
+async function backfillAchievement(
+  achievementId: string,
+  target: number,
+  xpReward: number,
+): Promise<void> {
+  const db = await getDb();
+  const now = new Date();
+
+  const qualified = await db
+    .select({ userId: lessonProgress.userId })
+    .from(lessonProgress)
+    .where(eq(lessonProgress.completed, true))
+    .groupBy(lessonProgress.userId)
+    .having(sql`count(*) >= ${target}`);
+
+  for (const { userId } of qualified) {
+    const ins = await db
+      .insert(userAchievements)
+      .values({ userId, achievementId, progress: target, unlockedAt: now })
+      .onConflictDoNothing({ target: [userAchievements.userId, userAchievements.achievementId] })
+      .returning({ id: userAchievements.id });
+    if (ins.length === 0 || xpReward <= 0) continue; // already unlocked / nothing to award
+
+    const [p] = await db
+      .select({ xp: profiles.xp })
+      .from(profiles)
+      .where(eq(profiles.id, userId))
+      .limit(1);
+    if (!p) continue;
+    const newXp = p.xp + xpReward;
+    const newLevel = levelForXp(newXp);
+    await db
+      .update(profiles)
+      .set({ xp: newXp, level: newLevel, rank: rankForLevel(newLevel) })
+      .where(eq(profiles.id, userId));
+  }
+}
+
 export async function createAchievement(formData: FormData): Promise<void> {
   await requireStaff();
   const db = await getDb();
   const title = str(formData, "title");
   if (!title) return;
   const code = slugCode(str(formData, "code") || title, "ach");
+  const target = Math.max(1, int(formData, "target", 1));
+  const xpReward = Math.max(0, int(formData, "xpReward"));
 
-  await db
+  const [created] = await db
     .insert(achievements)
     .values({
       code,
       title,
       description: str(formData, "description"),
-      target: Math.max(1, int(formData, "target", 1)),
-      xpReward: Math.max(0, int(formData, "xpReward")),
+      target,
+      xpReward,
     })
-    .onConflictDoNothing({ target: achievements.code });
+    .onConflictDoNothing({ target: achievements.code })
+    .returning({ id: achievements.id });
+
+  if (created) await backfillAchievement(created.id, target, xpReward);
+
+  revalidateGamification();
+}
+
+/** Edits an achievement and re-runs the backfill (a lowered target opens it). */
+export async function updateAchievement(formData: FormData): Promise<void> {
+  await requireStaff();
+  const db = await getDb();
+  const id = str(formData, "achievementId");
+  const title = str(formData, "title");
+  if (!id || !title) return; // never wipe the title with a blank submit
+
+  const target = Math.max(1, int(formData, "target", 1));
+  const xpReward = Math.max(0, int(formData, "xpReward"));
+  await db
+    .update(achievements)
+    .set({ title, description: str(formData, "description"), target, xpReward })
+    .where(eq(achievements.id, id));
+
+  await backfillAchievement(id, target, xpReward);
 
   revalidateGamification();
 }
@@ -547,21 +682,40 @@ export async function setRedemptionStatus(formData: FormData): Promise<void> {
 /* ------------------------------- users ------------------------------- */
 
 type Role = "student" | "curator" | "admin" | "superadmin";
-const ROLES: readonly Role[] = ["student", "curator", "admin", "superadmin"];
+/**
+ * Roles the admin UI may assign. "curator" exists in the DB enum but has no
+ * screens of its own (it is not staff, so /admin redirects it away) — handing it
+ * out would create an account that can do nothing, so it is not offered.
+ * "superadmin" is accepted here but additionally gated on the caller's own role.
+ */
+const ASSIGNABLE_ROLES: readonly Role[] = ["student", "admin", "superadmin"];
+
+/** Superadmins left on the platform — the last one may never be removed. */
+async function countSuperadmins(): Promise<number> {
+  const db = await getDb();
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(profiles)
+    .where(eq(profiles.role, "superadmin"));
+  return row?.n ?? 0;
+}
 
 /**
  * Creates an account on behalf of a customer (e.g. after a Kaspi/WhatsApp
  * payment). The owner sets the initial password and relays it to the student.
  */
 export async function createUser(formData: FormData): Promise<void> {
-  await requireStaff();
+  const session = await requireStaff();
   const db = await getDb();
 
   const fullName = str(formData, "fullName");
   const email = str(formData, "email").toLowerCase();
   const password = (formData.get("password") ?? "").toString();
   const rawRole = str(formData, "role") as Role;
-  const role: Role = ROLES.includes(rawRole) ? rawRole : "student";
+  let role: Role = ASSIGNABLE_ROLES.includes(rawRole) ? rawRole : "student";
+  // Only an owner can mint another owner — otherwise a plain admin could
+  // promote themselves past the owner via a hand-crafted request.
+  if (role === "superadmin" && session.role !== "superadmin") role = "admin";
 
   if (!fullName || !email || !email.includes("@")) return;
   if (password.length < MIN_PASSWORD) return;
@@ -613,6 +767,85 @@ export async function resetUserPassword(formData: FormData): Promise<void> {
     .where(eq(profiles.id, userId));
 
   revalidatePath(`/admin/users/${userId}`);
+}
+
+/**
+ * Edits an account (name / email / role). The role guards exist so the owner
+ * can't lock themselves — or everyone — out of /admin:
+ *   - nobody changes their OWN role (a self-demote drops you out mid-request);
+ *   - only a superadmin hands out superadmin;
+ *   - the last superadmin can't be demoted.
+ * A blocked role change keeps the current role rather than failing the whole
+ * edit, so the name/email part still saves.
+ */
+export async function updateUser(formData: FormData): Promise<void> {
+  const session = await requireStaff();
+  const db = await getDb();
+
+  const userId = str(formData, "userId");
+  const fullName = str(formData, "fullName");
+  const email = str(formData, "email").toLowerCase();
+  if (!userId || !fullName || !email.includes("@")) return;
+
+  const [target] = await db
+    .select({ role: profiles.role })
+    .from(profiles)
+    .where(eq(profiles.id, userId))
+    .limit(1);
+  if (!target) return;
+
+  const rawRole = str(formData, "role") as Role;
+  let role: Role = ASSIGNABLE_ROLES.includes(rawRole) ? rawRole : target.role;
+  if (userId === session.userId) role = target.role;
+  if (role === "superadmin" && session.role !== "superadmin") role = target.role;
+  if (target.role === "superadmin" && role !== "superadmin" && (await countSuperadmins()) <= 1)
+    role = target.role;
+
+  // Email is the login — a duplicate would throw on the unique index and lose
+  // the whole edit, so bail out before writing.
+  const [clash] = await db
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(and(eq(profiles.email, email), ne(profiles.id, userId)))
+    .limit(1);
+  if (clash) return;
+
+  await db.update(profiles).set({ fullName, email, role }).where(eq(profiles.id, userId));
+
+  // Someone turned INTO a student needs the baseline signup gives everyone else
+  // (free courses + active missions), otherwise their cabinet stays empty.
+  if (role === "student" && target.role !== "student") await provisionNewStudent(db, userId);
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/users/${userId}`);
+}
+
+/**
+ * Deletes an account for good — enrollments, progress and payment history
+ * cascade with it. Guarded against the two irreversible mistakes: deleting
+ * yourself, and deleting the last superadmin (nobody would own the platform).
+ */
+export async function deleteUser(formData: FormData): Promise<void> {
+  const session = await requireStaff();
+  const db = await getDb();
+
+  const userId = str(formData, "userId");
+  if (!userId || userId === session.userId) return;
+
+  const [target] = await db
+    .select({ role: profiles.role })
+    .from(profiles)
+    .where(eq(profiles.id, userId))
+    .limit(1);
+  if (!target) return;
+  if (target.role === "superadmin" && (await countSuperadmins()) <= 1) return;
+
+  await db.delete(profiles).where(eq(profiles.id, userId));
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/users");
+  redirect("/admin/users");
 }
 
 /* --------------------------- access / payments --------------------------- */

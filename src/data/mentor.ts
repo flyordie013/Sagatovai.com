@@ -12,6 +12,8 @@ import {
   lessonProgress,
 } from "@/db/schema";
 import { levelForXp, rankForLevel } from "@/lib/leveling";
+import { effectiveStreak } from "@/lib/streak";
+import { courseVisibleToStudent } from "./course";
 import type { MentorLearningContext } from "@/lib/mentor-ai";
 
 export interface MentorMessage {
@@ -83,7 +85,11 @@ export async function getMentorLearningContext(
   const db = await getDb();
 
   const [p] = await db
-    .select({ xp: profiles.xp, streak: profiles.currentStreak })
+    .select({
+      xp: profiles.xp,
+      streak: profiles.currentStreak,
+      lastActivityAt: profiles.lastActivityAt,
+    })
     .from(profiles)
     .where(eq(profiles.id, userId))
     .limit(1);
@@ -92,7 +98,9 @@ export async function getMentorLearningContext(
   const ctx: MentorLearningContext = {
     rank: rankForLevel(level),
     level,
-    currentStreak: p?.streak ?? 0,
+    // A broken streak reads as 0 — the mentor must not congratulate a student
+    // on "30 дней подряд" they lost a month ago.
+    currentStreak: p ? effectiveStreak(p.streak, p.lastActivityAt) : 0,
     activeCourse: null,
     currentLesson: null,
     nextLesson: null,
@@ -100,7 +108,8 @@ export async function getMentorLearningContext(
   };
   if (!p) return ctx;
 
-  // Published courses the user is enrolled in (scoped by userId).
+  // Courses the user is enrolled in and still allowed to see (scoped by userId):
+  // released ones, plus drafts/archived courses their enrollment keeps open.
   const enrolled = await db
     .select({
       id: courses.id,
@@ -109,14 +118,16 @@ export async function getMentorLearningContext(
     })
     .from(enrollments)
     .innerJoin(courses, eq(enrollments.courseId, courses.id))
-    .where(and(eq(enrollments.userId, userId), eq(courses.isPublished, true)))
+    .where(and(eq(enrollments.userId, userId), courseVisibleToStudent()))
     .orderBy(asc(courses.orderIndex));
   const accessible = enrolled.filter((c) => c.access !== "locked");
 
   // Most recently touched lesson (scoped by userId). Accessibility is filtered
-  // in SQL *before* the limit, so progress in an unpublished/locked course can
-  // never crowd out the real active lesson. `id` breaks ties deterministically
-  // (rows written in one batch share a timestamp).
+  // in SQL *before* the limit, so progress in a locked course can never crowd
+  // out the real active lesson. A live enrollment is the whole test here — it
+  // already covers drafts and archived courses, exactly like the list above.
+  // `id` breaks ties deterministically (rows written in one batch share a
+  // timestamp).
   const [active = null] = await db
     .select({
       lessonId: lessonProgress.lessonId,
@@ -136,11 +147,7 @@ export async function getMentorLearningContext(
       and(eq(enrollments.courseId, courses.id), eq(enrollments.userId, userId)),
     )
     .where(
-      and(
-        eq(lessonProgress.userId, userId),
-        eq(courses.isPublished, true),
-        ne(enrollments.accessType, "locked"),
-      ),
+      and(eq(lessonProgress.userId, userId), ne(enrollments.accessType, "locked")),
     )
     .orderBy(desc(lessonProgress.updatedAt), desc(lessonProgress.id))
     .limit(1);

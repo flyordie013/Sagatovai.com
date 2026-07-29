@@ -13,6 +13,8 @@ import {
 } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { levelProgress, type LevelProgress } from "@/lib/leveling";
+import { effectiveStreak } from "@/lib/streak";
+import { courseVisibleToStudent } from "./course";
 
 export interface ProfileCourse {
   title: string;
@@ -57,7 +59,8 @@ export async function getProfile(): Promise<ProfileData> {
 
   const lp = levelProgress(p.xp);
 
-  // Enrolled, published courses.
+  // Courses this student is enrolled in and still allowed to see (a draft the
+  // owner opened for them counts; an archived course they paid for stays).
   const enrolled = await db
     .select({
       id: courses.id,
@@ -67,7 +70,7 @@ export async function getProfile(): Promise<ProfileData> {
     })
     .from(enrollments)
     .innerJoin(courses, eq(enrollments.courseId, courses.id))
-    .where(and(eq(enrollments.userId, uid), eq(courses.isPublished, true)))
+    .where(and(eq(enrollments.userId, uid), courseVisibleToStudent()))
     .orderBy(courses.orderIndex);
 
   // Total lessons per course.
@@ -151,7 +154,10 @@ export async function getProfile(): Promise<ProfileData> {
       fullName: p.fullName,
       email: p.email,
       avatarUrl: p.avatarUrl,
-      streak: p.currentStreak,
+      // The stored counter is stale until the next completed lesson rewrites
+      // it — show 0 once the run is actually broken. `longestStreak` is a
+      // record, so it keeps its value.
+      streak: effectiveStreak(p.currentStreak, p.lastActivityAt),
       longestStreak: p.longestStreak,
       ...lp,
     },

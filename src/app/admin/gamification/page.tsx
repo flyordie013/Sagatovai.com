@@ -5,6 +5,7 @@ import {
   toggleMission,
   deleteMission,
   createAchievement,
+  updateAchievement,
   deleteAchievement,
   createStoreItem,
   deleteStoreItem,
@@ -19,16 +20,10 @@ import {
   SubmitButton,
   ConfirmSubmit,
 } from "@/components/admin/form";
+import { formatDateTime } from "@/components/admin/format";
 import { formatNumber } from "@/lib/utils";
 
 export const metadata = { title: "Геймификация" };
-
-const dateFmt = new Intl.DateTimeFormat("ru-RU", {
-  day: "numeric",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
 
 const CATEGORY_LABEL: Record<string, string> = {
   merch: "Мерч",
@@ -92,8 +87,7 @@ export default async function GamificationPage() {
                   </a>
                 </p>
                 <p className="mt-0.5 font-mono text-xs text-faint">
-                  {CATEGORY_LABEL[r.category] ?? r.category} ·{" "}
-                  {dateFmt.format(new Date(r.createdAt))}
+                  {CATEGORY_LABEL[r.category] ?? r.category} · {formatDateTime(r.createdAt)}
                 </p>
                 {r.note && (
                   <p className="mt-1.5 rounded-lg border border-line bg-raised px-2.5 py-1.5 text-xs text-muted">
@@ -232,6 +226,10 @@ export default async function GamificationPage() {
               <SubmitButton pendingLabel="Создаём…">Добавить достижение</SubmitButton>
             </div>
           </form>
+          <p className="mt-3 text-xs text-faint">
+            Достижение сразу открывается всем, кто уже прошёл нужное количество уроков, —
+            вместе с наградой XP. То же происходит при изменении порога.
+          </p>
         </Card>
 
         {achievements.length === 0 ? (
@@ -240,23 +238,43 @@ export default async function GamificationPage() {
           </p>
         ) : (
           achievements.map((a) => (
-            <Card key={a.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-              <div className="min-w-0">
-                <p className="font-semibold">{a.title}</p>
-                <p className="mt-0.5 text-sm text-muted">{a.description}</p>
-                <p className="mt-0.5 font-mono text-xs text-faint">
-                  {a.target} уроков · +{formatNumber(a.xpReward)} XP
-                </p>
-              </div>
-              <form action={deleteAchievement} className="shrink-0">
+            <Card key={a.id} className="p-4">
+              <form action={updateAchievement} className="grid gap-3 sm:grid-cols-2">
+                <input type="hidden" name="achievementId" value={a.id} />
+                <Field label="Название">
+                  <TextInput name="title" defaultValue={a.title} required />
+                </Field>
+                <Field label="Описание">
+                  <TextInput name="description" defaultValue={a.description} />
+                </Field>
+                <Field label="Сколько уроков нужно пройти">
+                  <TextInput name="target" type="number" min="1" defaultValue={a.target} />
+                </Field>
+                <Field label="Награда, XP">
+                  <TextInput
+                    name="xpReward"
+                    type="number"
+                    min="0"
+                    step="10"
+                    defaultValue={a.xpReward}
+                  />
+                </Field>
+                <div className="flex items-center gap-3 sm:col-span-2">
+                  <SubmitButton>Сохранить</SubmitButton>
+                  <span className="font-mono text-xs text-faint">
+                    {a.target} уроков · +{formatNumber(a.xpReward)} XP
+                  </span>
+                </div>
+              </form>
+              <form action={deleteAchievement} className="mt-3 border-t border-line pt-3">
                 <input type="hidden" name="achievementId" value={a.id} />
                 <ConfirmSubmit
-                  aria-label="Удалить достижение"
-                  triggerClassName="grid size-9 place-items-center rounded-lg border border-line text-muted transition-colors hover:border-danger/40 hover:bg-danger/10 hover:text-danger"
+                  triggerClassName="inline-flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-danger"
                   confirmLabel="Удалить"
-                  prompt="Точно?"
+                  prompt="Удалить достижение?"
                 >
-                  <Trash2 className="size-4" />
+                  <Trash2 className="size-3.5" />
+                  Удалить достижение
                 </ConfirmSubmit>
               </form>
             </Card>

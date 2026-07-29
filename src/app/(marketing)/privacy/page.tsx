@@ -1,9 +1,15 @@
+import Link from "next/link";
+
 export const metadata = {
   title: "Политика конфиденциальности",
   description: "Как OQU обрабатывает и защищает персональные данные пользователей.",
 };
 
-const UPDATED = "24 июля 2026 г.";
+const UPDATED = "29 июля 2026 г.";
+
+// Same support number as the course pages use for purchase requests.
+const WHATSAPP_URL = "https://wa.me/77073330241";
+const WHATSAPP_LABEL = "+7 707 333 0241";
 
 export default function PrivacyPage() {
   return (
@@ -41,7 +47,18 @@ export default function PrivacyPage() {
           <h2 className="font-display text-lg font-bold text-text">Хранение и защита</h2>
           <p>
             Данные хранятся на защищённых серверах. Доступ к ним имеет ограниченный круг лиц,
-            необходимый для оказания услуг. Пароли хранятся в зашифрованном виде.
+            необходимый для оказания услуг. Пароли хранятся в зашифрованном виде. Мы храним
+            данные, пока действует ваш аккаунт или пока это необходимо для оказания услуг, —
+            и удаляем их по вашему запросу.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display text-lg font-bold text-text">Передача третьим лицам</h2>
+          <p>
+            Мы не продаём и не передаём ваши данные третьим лицам, кроме случаев, когда это
+            необходимо для работы сервиса (хостинг, отправка писем, мессенджеры для связи с
+            вами) или прямо требуется законодательством Республики Казахстан.
           </p>
         </section>
 
@@ -56,15 +73,37 @@ export default function PrivacyPage() {
         <section className="space-y-2">
           <h2 className="font-display text-lg font-bold text-text">Контакты</h2>
           <p>
-            По вопросам обработки персональных данных свяжитесь с нами через форму заявки на
-            сайте.
+            По любым вопросам об обработке персональных данных — доступ, исправление,
+            удаление, отзыв согласия — напишите нам:
           </p>
+          <ul className="space-y-1.5">
+            <li>
+              WhatsApp:{" "}
+              <a
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 transition-colors hover:text-text"
+              >
+                {WHATSAPP_LABEL}
+              </a>
+            </li>
+            <li>
+              Или оставьте заявку через{" "}
+              <Link
+                href="/#zayavka"
+                className="underline underline-offset-2 transition-colors hover:text-text"
+              >
+                форму на сайте
+              </Link>
+              .
+            </li>
+          </ul>
         </section>
 
         <p className="text-xs text-faint">
-          Это базовая версия документа. Перед публичным запуском рекомендуем согласовать текст с
-          юристом с учётом требований Закона Республики Казахстан «О персональных данных и их
-          защите».
+          Обработка персональных данных ведётся в соответствии с законодательством Республики
+          Казахстан, в том числе с Законом «О персональных данных и их защите».
         </p>
       </div>
     </div>

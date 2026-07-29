@@ -5,6 +5,7 @@ import { getDb } from "@/db";
 import { profiles } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { levelProgress } from "@/lib/leveling";
+import { effectiveStreak } from "@/lib/streak";
 import type { UserSummary } from "@/types";
 
 export async function getCurrentUser(): Promise<UserSummary> {
@@ -26,6 +27,8 @@ export async function getCurrentUser(): Promise<UserSummary> {
     rank: lp.rank,
     level: lp.level,
     xp: p.xp,
-    currentStreak: p.currentStreak,
+    // A streak that hasn't been kept up (no activity today or yesterday) is 0,
+    // matching how it's shown on the dashboard, profile and leaderboard.
+    currentStreak: effectiveStreak(p.currentStreak, p.lastActivityAt),
   };
 }

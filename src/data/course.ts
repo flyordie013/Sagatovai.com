@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   courses,
@@ -44,6 +44,23 @@ function hiddenFromStudent(
   return (!course.isPublished || course.isArchived) && !hasCourseAccess(access);
 }
 
+/**
+ * The same rule as `hiddenFromStudent`, but as a WHERE condition for course
+ * LISTS: a course belongs in a student's catalog when it's publicly released
+ * OR the student holds a real enrollment. Filtering on `is_published` alone
+ * hides a draft the owner granted access to, and drops a course out of paying
+ * students' accounts the moment it's archived.
+ *
+ * The query must join `enrollments` scoped to that student. With a LEFT JOIN a
+ * missing row leaves `access_type` NULL, which is never `<> 'locked'`.
+ */
+export function courseVisibleToStudent() {
+  return or(
+    and(eq(courses.isPublished, true), eq(courses.isArchived, false)),
+    ne(enrollments.accessType, "locked"),
+  );
+}
+
 /** Ordered lessons of a course (by module order, then lesson order). */
 async function orderedLessons(db: Awaited<ReturnType<typeof getDb>>, courseId: number) {
   return db
@@ -86,7 +103,7 @@ export interface StudentLesson {
   title: string;
   duration: number;
   completed: boolean;
-  /** Sequential gate: the previous lesson is done (or this is the first). */
+  /** Sequential gate: free preview, first lesson, or the previous one is done. */
   unlocked: boolean;
   /** Marked as a free preview by the owner. */
   isFree: boolean;
@@ -135,9 +152,14 @@ export async function getCourseForStudent(slug: string, userId: string) {
   const done = await completedIds(db, userId, ordered.map((l) => l.id));
 
   // Sequential unlock: a lesson is unlocked if it's first or the previous is done.
+  // A free preview always opens, whatever its position — the gate would
+  // otherwise bury every preview that isn't lesson №1 behind lessons the
+  // student can't even watch.
   const unlocked = new Set<number>();
   for (let i = 0; i < ordered.length; i++) {
-    if (i === 0 || done.has(ordered[i - 1].id)) unlocked.add(ordered[i].id);
+    if (i === 0 || ordered[i].isFree || done.has(ordered[i - 1].id)) {
+      unlocked.add(ordered[i].id);
+    }
   }
 
   const owns = hasCourseAccess(access);
@@ -206,7 +228,10 @@ export async function getLessonForStudent(lessonId: number, userId: string) {
   const ordered = await orderedLessons(db, course.id);
   const done = await completedIds(db, userId, ordered.map((l) => l.id));
   const index = ordered.findIndex((l) => l.id === lessonId);
-  const unlocked = index === 0 || (index > 0 && done.has(ordered[index - 1].id));
+  // Same gate as the course page (free previews ignore the sequence). This also
+  // opens /api/lessons/[id]/video, which reuses `unlocked` + `canView`.
+  const unlocked =
+    index === 0 || row.lesson.isFree || (index > 0 && done.has(ordered[index - 1].id));
 
   const [progress] = await db
     .select({ watchedPct: lessonProgress.watchedPct, completed: lessonProgress.completed })

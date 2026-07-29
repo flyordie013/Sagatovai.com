@@ -32,7 +32,9 @@ export async function login(
   const h = await headers();
   const ip = clientIp(h.get("x-forwarded-for"));
   const key = `login:${ip}:${email}`;
-  if (!rateLimit(key, { max: 8, windowMs: 5 * 60_000 }).ok) {
+  // `ip` also caps attempts from one address across *different* emails, so the
+  // narrow ip+email key can't be sidestepped by rotating the email field.
+  if (!rateLimit(key, { max: 8, windowMs: 5 * 60_000, ip }).ok) {
     return { error: "Слишком много попыток. Попробуйте через несколько минут." };
   }
 

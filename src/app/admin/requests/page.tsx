@@ -4,15 +4,10 @@ import { getPurchaseRequests } from "@/data/admin";
 import { grantAccess, declineRequest } from "../actions";
 import { Card } from "@/components/ui/card";
 import { Field, TextInput, Select, SubmitButton, ConfirmSubmit } from "@/components/admin/form";
+import { formatDate } from "@/components/admin/format";
 import { formatNumber, pluralize } from "@/lib/utils";
 
 export const metadata = { title: "Запросы на доступ" };
-
-const dateFmt = new Intl.DateTimeFormat("ru-RU", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-});
 
 export default async function RequestsPage() {
   const requests = await getPurchaseRequests();
@@ -28,7 +23,7 @@ export default async function RequestsPage() {
         </h2>
         <p className="mt-1.5 text-sm text-muted">
           Здесь <strong className="text-text">зарегистрированные студенты</strong>, которые
-          нажали «Оставить заявку» на платном курсе. Заявки от посетителей без аккаунта —
+          нажали «Оставить заявку» на платном курсе. Обращения посетителей без аккаунта —
           в разделе{" "}
           <Link href="/admin/leads" className="text-gold underline-offset-2 hover:underline">
             «Лиды с сайта»
@@ -43,7 +38,7 @@ export default async function RequestsPage() {
         <p className="text-sm leading-relaxed text-muted">
           Порядок работы: свяжитесь со студентом по email, примите оплату (Kaspi / перевод),
           затем нажмите <strong className="text-text">«Выдать доступ»</strong> — курс сразу
-          откроется у него в кабинете, а заявка станет оплатой и попадёт в выручку. Сумма
+          откроется у него в кабинете, а запрос станет оплатой и попадёт в выручку. Сумма
           подставлена из цены курса — измените, если была скидка.
         </p>
       </Card>
@@ -79,7 +74,7 @@ export default async function RequestsPage() {
                     >
                       {r.userName}
                     </Link>{" "}
-                    · {dateFmt.format(new Date(r.createdAt))}
+                    · {formatDate(r.createdAt)}
                   </p>
                   <a
                     href={`mailto:${r.userEmail}`}

@@ -1,8 +1,11 @@
+import Link from "next/link";
 import { MessageSquare, Phone, BookOpen } from "lucide-react";
 import { listLeads } from "@/data/admin";
 import { setLeadStatus } from "../actions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { formatDateTime } from "@/components/admin/format";
+import { pluralize } from "@/lib/utils";
 
 const NEXT_STATUSES = [
   { value: "contacted", label: "Связались" },
@@ -12,13 +15,6 @@ const NEXT_STATUSES = [
 ] as const;
 
 export const metadata = { title: "Лиды с сайта" };
-
-const dateFmt = new Intl.DateTimeFormat("ru-RU", {
-  day: "numeric",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
 
 const STATUS: Record<string, { label: string; variant: "gold" | "teal" | "neutral" | "danger" }> = {
   new: { label: "Новый", variant: "gold" },
@@ -39,18 +35,25 @@ export default async function AdminLeadsPage() {
         </p>
         <h2 className="font-display text-2xl font-extrabold sm:text-3xl">Лиды с сайта</h2>
         <p className="mt-1.5 text-sm text-muted">
-          Заявки от посетителей, у которых ещё нет аккаунта. {fresh > 0
-            ? `${fresh} новых — свяжитесь и откройте доступ.`
-            : "Новых заявок нет."}
+          Обращения посетителей, у которых ещё{" "}
+          <strong className="text-text">нет аккаунта</strong>.{" "}
+          {fresh > 0
+            ? `${fresh} ${pluralize(fresh, ["новый", "новых", "новых"])} — свяжитесь, создайте аккаунт и откройте доступ.`
+            : "Новых лидов нет."}{" "}
+          Студенты, уже зарегистрированные на платформе, оставляют заявку на курс в разделе{" "}
+          <Link href="/admin/requests" className="text-gold underline-offset-2 hover:underline">
+            «Запросы на доступ»
+          </Link>
+          .
         </p>
       </header>
 
       {rows.length === 0 ? (
         <Card className="grid place-items-center px-6 py-14 text-center">
           <MessageSquare className="mb-3 size-8 text-faint" />
-          <p className="font-display font-bold">Пока нет заявок</p>
+          <p className="font-display font-bold">Пока нет лидов</p>
           <p className="mt-1 max-w-sm text-sm text-muted">
-            Заявки с публичной страницы сайта появятся здесь.
+            Обращения с формы на публичной странице сайта появятся здесь.
           </p>
         </Card>
       ) : (
@@ -71,7 +74,7 @@ export default async function AdminLeadsPage() {
                     <div className="flex items-center gap-2">
                       <Badge variant={st.variant}>{st.label}</Badge>
                       <span className="font-mono text-xs text-faint">
-                        {dateFmt.format(new Date(l.createdAt))}
+                        {formatDateTime(l.createdAt)}
                       </span>
                     </div>
                     {/* Triage: without this every lead stays "Новый" forever. */}

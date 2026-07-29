@@ -19,10 +19,12 @@
   --color-line: #23242e;
   --color-line-strong: #30313c;
 
-  /* text */
+  /* text — `faint` carries meaningful small copy (achievement descriptions,
+     leaderboard captions, hints), so it must clear WCAG AA 4.5:1 on our dark
+     surfaces while staying a step quieter than `muted`. */
   --color-text: #f4f2ec;
   --color-muted: #9a9aa6;
-  --color-faint: #6b6b76;
+  --color-faint: #8a8a96;
 
   /* accents */
   --color-gold: #f5a524;

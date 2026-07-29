@@ -1,5 +1,16 @@
 import Link from "next/link";
-import { Sparkles, Bot, Code2, Star, Clock, PlayCircle, ArrowRight, type LucideIcon } from "lucide-react";
+import {
+  Sparkles,
+  Bot,
+  Code2,
+  Star,
+  Clock,
+  PlayCircle,
+  ArrowRight,
+  BookOpen,
+  MessageCircle,
+  type LucideIcon,
+} from "lucide-react";
 import type { CourseIcon } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { formatNumber, pluralize } from "@/lib/utils";
@@ -34,10 +45,14 @@ export function PublicCourseCard({ course }: { course: PublicCourse }) {
           <PlayCircle className="size-3.5" />
           {course.lessonCount} {pluralize(course.lessonCount, ["урок", "урока", "уроков"])}
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <Star className="size-3.5 text-gold" />
-          {course.rating}
-        </span>
+        {/* A course with no ratings yet has rating 0 — showing "★ 0" reads as
+            a bad score, so the block is dropped entirely. */}
+        {course.rating > 0 && (
+          <span className="inline-flex items-center gap-1.5">
+            <Star className="size-3.5 text-gold" />
+            {course.rating}
+          </span>
+        )}
       </div>
 
       <div className="mt-5 flex items-center justify-between border-t border-line pt-4">
@@ -56,6 +71,45 @@ export function PublicCourseCard({ course }: { course: PublicCourse }) {
         </span>
       </div>
     </Link>
+  );
+}
+
+/**
+ * Shown wherever the storefront grid would otherwise be an empty box. The
+ * catalogue is filled in from /admin, so a visitor arriving early gets an
+ * explanation plus a way to leave a contact instead of a dead end.
+ * `homeLink` is off on the landing page itself — there's nowhere to go.
+ */
+export function CoursesEmptyState({ homeLink = true }: { homeLink?: boolean }) {
+  return (
+    <div className="grid place-items-center rounded-2xl border border-dashed border-line-strong bg-surface px-6 py-14 text-center">
+      <div className="mb-4 grid size-14 place-items-center rounded-2xl border border-gold/25 bg-gold/10 text-gold">
+        <BookOpen className="size-7" strokeWidth={1.7} />
+      </div>
+      <p className="font-display text-lg font-bold">Каталог наполняется</p>
+      <p className="mt-1.5 max-w-md text-sm leading-relaxed text-muted">
+        Первые курсы готовятся к запуску. Оставьте контакт — расскажем о старте и
+        поможем выбрать направление под вашу задачу.
+      </p>
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+        <Link
+          href="/#zayavka"
+          className="inline-flex items-center gap-2 rounded-xl bg-gold px-5 py-3 text-sm font-semibold text-gold-ink shadow-glow transition-colors hover:bg-gold-soft"
+        >
+          <MessageCircle className="size-4" />
+          Оставить заявку
+        </Link>
+        {homeLink && (
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-raised px-5 py-3 text-sm font-semibold text-text transition-colors hover:bg-raised-2"
+          >
+            На главную
+            <ArrowRight className="size-4" />
+          </Link>
+        )}
+      </div>
+    </div>
   );
 }
 

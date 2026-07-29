@@ -17,6 +17,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # AUTH_SECRET is required at import time by session-token.ts even during build;
 # a throwaway value is fine here — the real one is injected at runtime.
 ENV AUTH_SECRET=build-time-placeholder-not-used-at-runtime
+# Public origin baked into prerendered metadata (og:url, canonical, OG image).
+# Passed by docker-compose from .env; the default matches the live domain.
+ARG APP_URL=https://sagatovai.com
+ENV APP_URL=$APP_URL
 RUN pnpm build
 
 # ---- runtime: minimal standalone server ----
@@ -25,6 +29,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
+# Audience is in Kazakhstan (UTC+5) — keep day boundaries (streaks, admin
+# dates) on local time instead of the container default UTC.
+ENV TZ=Asia/Almaty
 RUN groupadd --system --gid 1001 nodejs \
  && useradd --system --uid 1001 --gid nodejs nextjs
 

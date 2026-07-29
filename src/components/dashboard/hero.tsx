@@ -9,10 +9,10 @@ export function Hero() {
         Каталог
       </p>
       <h2 className="max-w-[16ch] text-balance font-display text-3xl font-extrabold leading-[1.03] tracking-tight sm:text-4xl md:text-[42px]">
-        Выбери свой курс
+        Выберите свой курс
       </h2>
       <p className="mt-3 max-w-[48ch] text-[15px] text-muted">
-        Изучай AI и собирай реальные проекты — от первого промпта до продукта,
+        Изучайте AI и собирайте реальные проекты — от первого промпта до продукта,
         который приносит деньги.
       </p>
     </section>

@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Shield,
   Inbox,
+  MessageSquare,
   ArrowRight,
 } from "lucide-react";
 import { getAdminStats } from "@/data/admin";
@@ -60,11 +61,20 @@ export default async function AdminDashboard() {
           label="Выручка"
           value={`${formatNumber(s.revenue)} ₸`}
         />
+        {/* Two separate funnels — the labels must never read the same. */}
         <StatCard
           icon={Inbox}
-          label="Заявки"
-          value={s.requests}
-          sub={s.requests > 0 ? "ждут выдачи" : undefined}
+          label="Запросы на доступ"
+          value={s.openRequests}
+          sub={s.openRequests > 0 ? "ждут выдачи" : undefined}
+          href="/admin/requests"
+        />
+        <StatCard
+          icon={MessageSquare}
+          label="Лиды с сайта"
+          value={s.newLeads}
+          sub={s.leadsTotal > 0 ? `новых из ${s.leadsTotal}` : undefined}
+          href="/admin/leads"
         />
         <StatCard
           icon={CheckCircle2}

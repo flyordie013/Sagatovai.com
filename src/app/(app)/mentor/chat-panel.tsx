@@ -80,7 +80,7 @@ export function ChatPanel({
               <Bot className="size-7" strokeWidth={1.7} />
             </div>
             <div>
-              <p className="font-display text-lg font-bold">Спроси меня о чём угодно</p>
+              <p className="font-display text-lg font-bold">Спросите меня о чём угодно</p>
               <p className="mt-1 text-sm text-muted">
                 Разберу тему урока, помогу с кодом или проектом.
               </p>
@@ -126,7 +126,7 @@ export function ChatPanel({
             }
           }}
           rows={1}
-          placeholder="Напиши сообщение…"
+          placeholder="Напишите сообщение…"
           className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-line-strong bg-raised px-3.5 py-2.5 text-sm text-text outline-none placeholder:text-faint focus:border-gold/50"
         />
         <button

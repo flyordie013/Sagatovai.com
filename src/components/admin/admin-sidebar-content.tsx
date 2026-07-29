@@ -3,14 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeft, Shield } from "lucide-react";
-import { ADMIN_NAV } from "@/lib/admin-nav";
+import { ADMIN_NAV, type AdminBadgeKey } from "@/lib/admin-nav";
 import { cn } from "@/lib/utils";
 
 function isActive(pathname: string, href: string): boolean {
   return href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
 }
 
-export function AdminSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+export function AdminSidebarContent({
+  counts,
+  onNavigate,
+}: {
+  counts?: Partial<Record<AdminBadgeKey, number>>;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
 
   return (
@@ -34,6 +40,9 @@ export function AdminSidebarContent({ onNavigate }: { onNavigate?: () => void })
         {ADMIN_NAV.map((item) => {
           const active = isActive(pathname, item.href);
           const Icon = item.icon;
+          // Unanswered leads / access requests — the owner should see them
+          // without opening the screen first.
+          const count = item.badge ? counts?.[item.badge] ?? 0 : 0;
           return (
             <Link
               key={item.href}
@@ -55,8 +64,21 @@ export function AdminSidebarContent({ onNavigate }: { onNavigate?: () => void })
                 strokeWidth={1.9}
               />
               <span>{item.label}</span>
+              {count > 0 && (
+                <span
+                  aria-label={`${count} новых`}
+                  className="nums ml-auto rounded-full border border-gold/30 bg-gold/15 px-1.5 py-0.5 text-[10px] font-bold leading-none text-gold"
+                >
+                  {count > 99 ? "99+" : count}
+                </span>
+              )}
               {active && (
-                <span className="ml-auto size-1.5 rounded-full bg-gold shadow-[0_0_8px_var(--color-gold)]" />
+                <span
+                  className={cn(
+                    "size-1.5 rounded-full bg-gold shadow-[0_0_8px_var(--color-gold)]",
+                    count > 0 ? "ml-1.5" : "ml-auto",
+                  )}
+                />
               )}
             </Link>
           );

@@ -52,8 +52,8 @@ const SYSTEM_PROMPT =
   "Ты — AI-наставник образовательной платформы по искусственному интеллекту для " +
   "русскоязычных студентов из Казахстана. Помогай разбираться в темах курса: объясняй " +
   "понятно и по шагам, приводи короткие практические примеры, поддерживай и мотивируй. " +
-  "Отвечай на русском языке, кратко и по делу. Не выдумывай факты — если чего-то не " +
-  "знаешь, скажи об этом честно.";
+  "Отвечай на русском языке, кратко и по делу. Обращайся к студенту на «вы». Не выдумывай " +
+  "факты — если чего-то не знаешь, скажи об этом честно.";
 
 const MAX_TURNS = 12; // trim long threads before sending to the model
 const MAX_TOKENS = 800;
@@ -99,7 +99,7 @@ export async function generateReply(
   ctx: MentorCtx = {},
 ): Promise<string> {
   const provider = resolveProvider();
-  if (!provider) return demoReply(history, ctx);
+  if (!provider) return demoReply(ctx);
 
   let system = SYSTEM_PROMPT;
   if (ctx.userName)
@@ -113,11 +113,11 @@ export async function generateReply(
         ? await callAnthropic(provider, system, turns)
         : await callOpenAICompatible(provider, system, turns);
     const text = reply.trim();
-    return text || "Не удалось сформировать ответ. Попробуй переформулировать вопрос.";
+    return text || "Не удалось сформировать ответ. Попробуйте переформулировать вопрос.";
   } catch (err) {
     // The chat must never crash on a provider hiccup — degrade gracefully.
     console.error("[mentor-ai] provider call failed:", err);
-    return "Извини, не получилось получить ответ от AI прямо сейчас. Попробуй ещё раз через минуту.";
+    return "Извините, не получилось получить ответ прямо сейчас. Попробуйте ещё раз через минуту.";
   }
 }
 
@@ -225,25 +225,31 @@ function renderLearning(l: MentorLearningContext): string {
   return lines.join("\n");
 }
 
-function demoReply(history: ChatMessage[], ctx: MentorCtx): string {
-  const last = [...history].reverse().find((m) => m.role === "user")?.content ?? "";
+/**
+ * Reply used while no LLM provider is configured. The student must never see
+ * env-var names or setup steps here — the actionable hint goes to the server
+ * log only, and staff get the same hint in the banner on /mentor.
+ */
+function demoReply(ctx: MentorCtx): string {
+  console.warn(
+    "[mentor-ai] no LLM provider configured — students get the placeholder reply. " +
+      "Set GROQ_API_KEY (free), OPENAI_API_KEY or ANTHROPIC_API_KEY to go live.",
+  );
   const name = ctx.userName ? `, ${ctx.userName}` : "";
   const cl = ctx.learning?.currentLesson;
   const course = ctx.learning?.activeCourse;
   const contextLine = cl
-    ? `Вижу, ты сейчас на уроке «${cl.title}»${course ? ` курса «${course.title}»` : ""} — ` +
-      `с подключённым ключом я бы разобрал именно его.\n\n`
+    ? `Вижу, вы сейчас на уроке «${cl.title}»${course ? ` курса «${course.title}»` : ""} — ` +
+      `с ним я обязательно помогу, как только вернусь.\n\n`
     : course
-      ? `Вижу, ты на курсе «${course.title}» — с ключом помогу с любым его уроком.\n\n`
+      ? `Вижу, вы проходите курс «${course.title}» — разберём его темы, как только я вернусь.\n\n`
       : "";
   return (
-    `Привет${name}! Я твой AI-наставник. Сейчас я в демо-режиме — ` +
-    `отвечаю заглушкой, потому что не подключён ключ LLM.\n\n` +
+    `Здравствуйте${name}! Я ваш AI-наставник, но сейчас я временно недоступен — ` +
+    `меня как раз настраивают.\n\n` +
     contextLine +
-    (last
-      ? `Ты спросил: «${last.slice(0, 240)}». Как только в .env.local появится ключ ` +
-        `(GROQ_API_KEY — бесплатно, или OPENAI_API_KEY / ANTHROPIC_API_KEY), ` +
-        `здесь будет развёрнутый ответ по теме твоего обучения.`
-      : `Задай любой вопрос по курсу — и после подключения ключа я разберу его по шагам.`)
+    `Пока лучше задать вопрос куратору: он ответит быстро и по существу. ` +
+    `Ваше сообщение сохранится в чате — загляните сюда чуть позже, я скоро заработаю ` +
+    `в полную силу.`
   );
 }

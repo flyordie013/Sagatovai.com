@@ -63,10 +63,13 @@ export function CourseCard({ course }: { course: CourseSummary }) {
           <PlayCircle className="size-3.5" />
           {course.lessons} {pluralize(course.lessons, ["урок", "урока", "уроков"])}
         </span>
-        <span className="inline-flex items-center gap-1.5 text-gold">
-          <Star className="size-3.5 fill-gold" />
-          <span className="nums text-text">{course.rating.toFixed(1)}</span>
-        </span>
+        {/* No ratings yet → rating is 0; «0.0» would look like a bad score. */}
+        {course.rating > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-gold">
+            <Star className="size-3.5 fill-gold" />
+            <span className="nums text-text">{course.rating.toFixed(1)}</span>
+          </span>
+        )}
       </div>
 
       <div className="mt-4">

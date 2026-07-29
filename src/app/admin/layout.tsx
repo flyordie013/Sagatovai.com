@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { eq } from "drizzle-orm";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { getAdminBadgeCounts } from "@/data/admin";
 import { getDb } from "@/db";
 import { profiles } from "@/db/schema";
 import { requireStaff } from "@/lib/session";
@@ -17,11 +18,18 @@ export default async function AdminLayout({
 }) {
   const session = await requireStaff();
   const db = await getDb();
-  const [me] = await db
-    .select({ name: profiles.fullName })
-    .from(profiles)
-    .where(eq(profiles.id, session.userId))
-    .limit(1);
+  const [[me], counts] = await Promise.all([
+    db
+      .select({ name: profiles.fullName })
+      .from(profiles)
+      .where(eq(profiles.id, session.userId))
+      .limit(1),
+    getAdminBadgeCounts(),
+  ]);
 
-  return <AdminShell ownerName={me?.name ?? "Админ"}>{children}</AdminShell>;
+  return (
+    <AdminShell ownerName={me?.name ?? "Админ"} counts={counts}>
+      {children}
+    </AdminShell>
+  );
 }

@@ -1,5 +1,5 @@
 import { listPublicCourses } from "@/data/public";
-import { PublicCourseCard } from "../public-course-card";
+import { PublicCourseCard, CoursesEmptyState } from "../public-course-card";
 
 export const metadata = {
   title: "Курсы",
@@ -24,9 +24,7 @@ export default async function PublicCoursesPage() {
       </header>
 
       {courses.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-line-strong bg-surface px-6 py-12 text-center text-sm text-muted">
-          Курсы скоро появятся.
-        </p>
+        <CoursesEmptyState />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {courses.map((c) => (

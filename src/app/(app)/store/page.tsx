@@ -56,8 +56,15 @@ function iconFor(item: StoreItem): LucideIcon {
   return ICON_MAP[item.icon] ?? CATEGORY_FALLBACK[item.category] ?? Gift;
 }
 
-function RewardCard({ item, xp }: { item: StoreItem; xp: number }) {
-  const Icon = iconFor(item);
+function RewardCard({
+  item,
+  xp,
+  icon: Icon,
+}: {
+  item: StoreItem;
+  xp: number;
+  icon: LucideIcon;
+}) {
   const locked = !item.unlocked;
   const xpShort = Math.max(0, item.xpRequired - xp);
   const pct =
@@ -160,7 +167,7 @@ export default async function StorePage() {
           Магазин
         </h1>
         <p className="text-muted">
-          Разблокируй награды за накопленный XP
+          Разблокируйте награды за накопленный XP
         </p>
       </header>
 
@@ -172,7 +179,7 @@ export default async function StorePage() {
             </div>
             <div>
               <p className="font-mono text-xs uppercase tracking-wider text-faint">
-                Твой баланс
+                Ваш баланс
               </p>
               <p className="nums font-display text-3xl font-extrabold leading-none sm:text-4xl">
                 {formatNumber(xp)}{" "}
@@ -205,8 +212,8 @@ export default async function StorePage() {
           </div>
           <p className="font-display text-lg font-bold">Наград пока нет</p>
           <p className="mt-1.5 text-sm text-muted">
-            Скоро здесь появятся награды за твой прогресс. Продолжай учиться и
-            копи XP.
+            Скоро здесь появятся награды за ваш прогресс. Продолжайте учиться и
+            копите XP.
           </p>
         </Card>
       ) : (
@@ -220,7 +227,12 @@ export default async function StorePage() {
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {list.map((item) => (
-                    <RewardCard key={item.id} item={item} xp={xp} />
+                    <RewardCard
+                      key={item.id}
+                      item={item}
+                      xp={xp}
+                      icon={iconFor(item)}
+                    />
                   ))}
                 </div>
               </section>

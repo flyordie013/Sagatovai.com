@@ -17,7 +17,12 @@ services:
       retries: 5
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        # Baked into the build: Next.js resolves metadataBase (OG/canonical
+        # URLs) while prerendering, long before the runtime env exists.
+        APP_URL: ${APP_URL:?set APP_URL in .env (e.g. https://oqu.kz)}
     restart: unless-stopped
     depends_on:
       db:
@@ -27,6 +32,9 @@ services:
       # sets HOSTNAME to the container id, so the server listens only on the
       # container IP and the loopback healthcheck (127.0.0.1) can't reach it.
       HOSTNAME: "0.0.0.0"
+      # Audience is in Kazakhstan (UTC+5). Without this the container runs in
+      # UTC and day boundaries (streaks, dates in /admin) shift by 5 hours.
+      TZ: Asia/Almaty
       # App connects to the db service over the compose network.
       DATABASE_URL: postgres://${POSTGRES_USER:-oqu}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-oqu}
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
@@ -50,7 +58,11 @@ services:
       # Uploaded videos persist across redeploys.
       - videos:/app/storage
     ports:
-      - "${APP_PORT:-3000}:3000"
+      # Loopback ONLY — the reverse proxy (Caddy, see DEPLOY.md) terminates
+      # HTTPS on the same host. Publishing on 0.0.0.0 would leave the app
+      # reachable at http://SERVER_IP:3000, sending passwords in plaintext and
+      # letting anyone forge X-Forwarded-For to slip past the rate limiter.
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
 
 volumes:
   db-data:

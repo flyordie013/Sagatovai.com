@@ -83,11 +83,12 @@ export default async function AdminUsersPage({
           <Field label="Пароль" hint="минимум 8 символов — передайте студенту">
             <TextInput name="password" type="text" required minLength={8} placeholder="например: oqu-2026-kz" />
           </Field>
+          {/* "curator" is deliberately gone: the role has no screens of its own
+              (not staff → bounced out of /admin), so it made dead accounts. */}
           <Field label="Роль">
             <Select name="role" defaultValue="student">
               <option value="student">Студент</option>
-              <option value="curator">Куратор</option>
-              <option value="admin">Админ</option>
+              <option value="admin">Админ — полный доступ к этой панели</option>
             </Select>
           </Field>
           <div className="sm:col-span-2">

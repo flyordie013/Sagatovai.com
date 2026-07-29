@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Bot, Trophy, PlayCircle, Sparkles, MessageCircle } from "lucide-react";
 import { listPublicCourses } from "@/data/public";
-import { PublicCourseCard } from "./public-course-card";
+import { PublicCourseCard, CoursesEmptyState } from "./public-course-card";
 import { LeadForm } from "./lead-form";
 
 export const metadata = {
@@ -79,9 +79,7 @@ export default async function LandingPage() {
         </header>
 
         {courses.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-line-strong bg-surface px-6 py-12 text-center text-sm text-muted">
-            Курсы скоро появятся. Оставьте заявку — сообщим о старте первыми.
-          </p>
+          <CoursesEmptyState homeLink={false} />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {courses.map((c) => (

@@ -167,6 +167,10 @@ export default async function LeaderboardPage() {
 
   const podium = rows.slice(0, 3);
   const hasPodium = podium.length === 3;
+  // The podium already shows the top-3 — the list picks up at 4-е место so the
+  // same three students aren't rendered twice on one screen.
+  const listRows = hasPodium ? rows.slice(3) : rows;
+  const firstPlace = hasPodium ? 4 : 1;
 
   return (
     <div className="mx-auto max-w-[1080px] space-y-6">
@@ -200,11 +204,13 @@ export default async function LeaderboardPage() {
             </div>
           )}
 
-          <div className="space-y-2">
-            {rows.map((row, i) => (
-              <Row key={row.id} row={row} place={i + 1} />
-            ))}
-          </div>
+          {listRows.length > 0 && (
+            <div className="space-y-2">
+              {listRows.map((row, i) => (
+                <Row key={row.id} row={row} place={firstPlace + i} />
+              ))}
+            </div>
+          )}
 
           {/* Outside the top list → still show the student where they stand,
               otherwise the board is one they can never see themselves on. */}

@@ -8,27 +8,30 @@ import {
   ShoppingCart,
   Wallet,
   KeyRound,
+  UserCog,
+  Trash2,
 } from "lucide-react";
 import { getUserForAdmin, listCourses } from "@/data/admin";
-import { grantAccess, resetUserPassword, revokeAccess } from "../../actions";
+import {
+  grantAccess,
+  resetUserPassword,
+  revokeAccess,
+  updateUser,
+  deleteUser,
+} from "../../actions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatCard } from "@/components/admin/stat-card";
 import { Field, TextInput, Select, SubmitButton, ConfirmSubmit } from "@/components/admin/form";
-import { formatNumber } from "@/lib/utils";
+import { formatDate } from "@/components/admin/format";
+import { formatNumber, pluralize } from "@/lib/utils";
 
 export const metadata = { title: "Профиль пользователя" };
 
 function initials(name: string): string {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
-
-const dateFmt = new Intl.DateTimeFormat("ru-RU", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-});
 
 const METHOD_LABEL: Record<string, string> = {
   whatsapp: "WhatsApp",
@@ -52,7 +55,18 @@ export default async function AdminUserDetail({
   const [data, courses] = await Promise.all([getUserForAdmin(id), listCourses()]);
   if (!data) notFound();
 
-  const { user, enrollments, totalCompleted, payments: userPayments, paidCount, spent } = data;
+  const {
+    user,
+    isSelf,
+    canDelete,
+    canChangeRole,
+    canGrantOwner,
+    enrollments,
+    totalCompleted,
+    payments: userPayments,
+    paidCount,
+    spent,
+  } = data;
   const isStaff = user.role === "admin" || user.role === "superadmin";
   // Archived courses can't be granted (they're retired) — used for both the
   // empty-state guard and the dropdown so they never disagree.
@@ -174,8 +188,97 @@ export default async function AdminUserDetail({
           <SubmitButton pendingLabel="Сохраняем…">Установить</SubmitButton>
         </form>
         <p className="mt-3 text-xs text-faint">
-          Старый пароль перестанет работать сразу. Уже открытые сессии не завершаются.
+          Старый пароль перестанет работать сразу. Все уже открытые сессии этого
+          пользователя завершатся — на всех устройствах придётся войти заново.
         </p>
+        {isSelf && (
+          <p className="mt-2 text-xs font-medium text-danger">
+            Это ваш собственный аккаунт: после сброса вас выкинет из системы, войдите заново
+            с новым паролем.
+          </p>
+        )}
+      </Card>
+
+      {/* account settings — until now a created account could never be fixed */}
+      <Card className="p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <UserCog className="size-4 text-gold" />
+          <h3 className="font-display text-lg font-bold">Данные аккаунта</h3>
+        </div>
+        <form action={updateUser} className="grid gap-3 sm:grid-cols-2">
+          <input type="hidden" name="userId" value={user.id} />
+          <Field label="Имя и фамилия">
+            <TextInput name="fullName" defaultValue={user.fullName} required maxLength={120} />
+          </Field>
+          <Field label="Email" hint="это логин для входа">
+            <TextInput
+              name="email"
+              type="email"
+              defaultValue={user.email}
+              required
+              maxLength={200}
+            />
+          </Field>
+          <Field
+            label="Роль"
+            hint={
+              isSelf
+                ? "свою роль менять нельзя"
+                : !canChangeRole
+                  ? "это последний владелец"
+                  : undefined
+            }
+          >
+            <Select name="role" defaultValue={user.role} disabled={!canChangeRole}>
+              <option value="student">Студент</option>
+              <option value="admin">Админ — полный доступ к этой панели</option>
+              {(canGrantOwner || user.role === "superadmin") && (
+                <option value="superadmin">Владелец</option>
+              )}
+              {user.role === "curator" && <option value="curator">Куратор (устаревшая)</option>}
+            </Select>
+          </Field>
+          <div className="flex items-end">
+            <SubmitButton>Сохранить</SubmitButton>
+          </div>
+        </form>
+        <div className="mt-4 border-t border-line pt-4">
+          {canDelete ? (
+            <form action={deleteUser}>
+              <input type="hidden" name="userId" value={user.id} />
+              <ConfirmSubmit
+                triggerClassName="inline-flex items-center gap-1.5 text-xs text-danger transition-colors hover:underline"
+                confirmLabel="Удалить пользователя"
+                prompt={
+                  paidCount > 0
+                    ? `У пользователя ${paidCount} ${pluralize(paidCount, ["оплата", "оплаты", "оплат"])} на ${formatNumber(spent)} ₸ — они исчезнут из выручки. Удалить?`
+                    : "Удалить аккаунт со всем прогрессом?"
+                }
+              >
+                <Trash2 className="size-3.5" />
+                Удалить пользователя
+              </ConfirmSubmit>
+              <p className="mt-2 text-xs text-faint">
+                Удаление безвозвратно: вместе с аккаунтом пропадут прогресс, доступы и
+                история платежей.
+                {paidCount > 0 && (
+                  <>
+                    {" "}
+                    <span className="text-danger">
+                      Учтите: {formatNumber(spent)} ₸ уйдут из общей выручки.
+                    </span>
+                  </>
+                )}
+              </p>
+            </form>
+          ) : (
+            <p className="text-xs text-faint">
+              {isSelf
+                ? "Свой аккаунт удалить нельзя."
+                : "Это последний владелец платформы — его нельзя удалить или понизить."}
+            </p>
+          )}
+        </div>
       </Card>
 
       {/* enrollments / progress */}
@@ -239,7 +342,7 @@ export default async function AdminUserDetail({
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{p.courseTitle}</p>
                   <p className="mt-0.5 font-mono text-xs text-muted">
-                    {METHOD_LABEL[p.method] ?? p.method} · {dateFmt.format(new Date(p.createdAt))}
+                    {METHOD_LABEL[p.method] ?? p.method} · {formatDate(p.createdAt)}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">

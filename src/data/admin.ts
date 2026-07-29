@@ -28,7 +28,11 @@ export interface AdminStats {
   enrollments: number;
   purchases: number;
   revenue: number;
-  requests: number;
+  /** Purchase REQUESTS from registered students (payments.status = requested). */
+  openRequests: number;
+  /** Storefront LEADS from visitors without an account (leads.status = new). */
+  newLeads: number;
+  leadsTotal: number;
   completedLessons: number;
   activeLearners: number;
 }
@@ -68,9 +72,13 @@ export async function getAdminStats(): Promise<AdminStats> {
     .from(payments)
     .where(eq(payments.status, "paid"));
 
-  const requests = await one(
-    db.select({ v: countInt }).from(payments).where(eq(payments.status, "requested")),
-  );
+  // Two different funnels, deliberately named apart: "запросы на доступ" come
+  // from registered students, "лиды" from anonymous storefront visitors.
+  const [openRequests, newLeads, leadsTotal] = await Promise.all([
+    one(db.select({ v: countInt }).from(payments).where(eq(payments.status, "requested"))),
+    one(db.select({ v: countInt }).from(leads).where(eq(leads.status, "new"))),
+    one(db.select({ v: countInt }).from(leads)),
+  ]);
 
   // Shown under the "Студентов" tile, so it must count students only —
   // otherwise staff testing lessons would be reported as active learners.
@@ -91,10 +99,34 @@ export async function getAdminStats(): Promise<AdminStats> {
     enrollments: enrollmentCount,
     purchases: paidAgg?.count ?? 0,
     revenue: paidAgg?.revenue ?? 0,
-    requests,
+    openRequests,
+    newLeads,
+    leadsTotal,
     completedLessons,
     activeLearners,
   };
+}
+
+export interface AdminBadgeCounts {
+  newLeads: number;
+  openRequests: number;
+}
+
+/**
+ * The two "someone is waiting for you" counters shown as sidebar badges.
+ * Kept separate from `getAdminStats` because the layout runs it on EVERY admin
+ * page — two counts, not a dozen aggregates.
+ */
+export async function getAdminBadgeCounts(): Promise<AdminBadgeCounts> {
+  await requireStaff();
+  const db = await getDb();
+
+  const [newLeads, openRequests] = await Promise.all([
+    db.select({ v: countInt }).from(leads).where(eq(leads.status, "new")),
+    db.select({ v: countInt }).from(payments).where(eq(payments.status, "requested")),
+  ]);
+
+  return { newLeads: newLeads[0]?.v ?? 0, openRequests: openRequests[0]?.v ?? 0 };
 }
 
 export interface PurchaseRequest {
@@ -213,7 +245,9 @@ export async function listCourses(): Promise<AdminCourseRow[]> {
   await requireStaff();
   const db = await getDb();
 
-  const rows = await db.select().from(courses).orderBy(courses.orderIndex);
+  // `id` tiebreaker → the list matches the order `moveCourse` reindexes, even
+  // while several courses still share a legacy orderIndex.
+  const rows = await db.select().from(courses).orderBy(asc(courses.orderIndex), asc(courses.id));
 
   const moduleCounts = await db
     .select({ courseId: modules.courseId, v: countInt })
@@ -367,10 +401,19 @@ export async function listUsers(opts: { q?: string; page?: number } = {}): Promi
 }
 
 export async function getUserForAdmin(userId: string) {
-  await requireStaff();
+  const me = await requireStaff();
   const db = await getDb();
   const [user] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
   if (!user) return null;
+
+  // Guards mirrored from updateUser/deleteUser so the UI can grey the controls
+  // out instead of letting the owner press a button that silently does nothing.
+  const [{ n: superadmins }] = await db
+    .select({ n: countInt })
+    .from(profiles)
+    .where(eq(profiles.role, "superadmin"));
+  const isSelf = user.id === me.userId;
+  const lastOwner = user.role === "superadmin" && superadmins <= 1;
 
   const enrolled = await db
     .select({
@@ -442,6 +485,13 @@ export async function getUserForAdmin(userId: string) {
 
   return {
     user,
+    isSelf,
+    /** Can this account be deleted at all? */
+    canDelete: !isSelf && !lastOwner,
+    /** Can its role be changed at all? */
+    canChangeRole: !isSelf && !lastOwner,
+    /** Only an owner hands out the owner role. */
+    canGrantOwner: me.role === "superadmin",
     enrollments: enrollments2,
     totalCompleted,
     payments: userPayments,

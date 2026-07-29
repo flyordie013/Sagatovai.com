@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/** OQU wordmark + geometric nomad mark. "OQU" is a working-title placeholder. */
+/** OQU wordmark + geometric nomad mark. */
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-3">
@@ -16,12 +16,9 @@ export function Brand({ compact = false }: { compact?: boolean }) {
         </svg>
       </div>
       {!compact && (
-        <div className="flex min-w-0 flex-col leading-none">
-          <span className="font-display text-xl font-extrabold tracking-[0.08em]">OQU</span>
-          <span className="mt-1 font-mono text-[8.5px] uppercase tracking-[0.14em] text-faint">
-            рабочее название
-          </span>
-        </div>
+        <span className="min-w-0 font-display text-xl font-extrabold leading-none tracking-[0.08em]">
+          OQU
+        </span>
       )}
     </div>
   );

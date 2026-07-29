@@ -70,10 +70,13 @@ export default async function PublicCoursePage({
               <PlayCircle className="size-4" />
               {course.lessonCount} {pluralize(course.lessonCount, ["урок", "урока", "уроков"])}
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Star className="size-4 text-gold" />
-              {course.rating}
-            </span>
+            {/* Rating 0 means "нет оценок", not "плохой курс" — hide it. */}
+            {course.rating > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <Star className="size-4 text-gold" />
+                {course.rating}
+              </span>
+            )}
           </div>
 
           {/* ---- curriculum ---- */}

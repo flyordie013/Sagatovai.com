@@ -22,7 +22,7 @@ export function RequestButton({
       {done ? (
         <p className="inline-flex items-center gap-2 rounded-xl border border-teal/30 bg-teal/10 px-4 py-2.5 text-sm text-teal">
           <Check className="size-4" />
-          Заявка отправлена — менеджер свяжется с тобой
+          Заявка отправлена — менеджер свяжется с вами
         </p>
       ) : (
         <button

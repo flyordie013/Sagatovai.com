@@ -30,7 +30,7 @@ export default async function DashboardPage() {
         <aside className="space-y-4">
           <AiMentorCard />
           <LevelCard user={data.user} />
-          <MissionCard mission={data.mission} />
+          <MissionCard mission={data.mission} completedLessons={data.completedLessons} />
         </aside>
       </div>
     </div>

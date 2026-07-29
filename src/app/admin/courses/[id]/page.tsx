@@ -1,6 +1,15 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Trash2, Plus, Video, FileText, ChevronUp, ChevronDown } from "lucide-react";
+import {
+  ArrowLeft,
+  Trash2,
+  Plus,
+  Video,
+  FileText,
+  ChevronUp,
+  ChevronDown,
+  AlertTriangle,
+} from "lucide-react";
 import { getCourseForAdmin } from "@/data/admin";
 import {
   updateCourse,
@@ -28,6 +37,7 @@ import {
   ConfirmSubmit,
 } from "@/components/admin/form";
 import { VideoUpload } from "@/components/admin/video-upload";
+import { RichText } from "@/components/ui/rich-text";
 import { pluralize } from "@/lib/utils";
 
 export const metadata = { title: "Редактирование курса" };
@@ -40,16 +50,21 @@ function fmtDuration(sec: number): string {
 
 export default async function AdminCourseDetail({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
-  const { id } = await params;
+  const [{ id }, { error }] = await Promise.all([params, searchParams]);
   const courseId = Number(id);
   const data = await getCourseForAdmin(courseId);
   if (!data) notFound();
 
   const { course, modules } = data;
   const lessonTotal = modules.reduce((n, m) => n + m.lessons.length, 0);
+  // An empty course must not reach the storefront — publishing is blocked in
+  // the action too, this only explains why the button is off.
+  const canPublish = lessonTotal > 0;
 
   return (
     <div className="mx-auto max-w-[900px] space-y-6">
@@ -60,6 +75,17 @@ export default async function AdminCourseDetail({
         <ArrowLeft className="size-4" />
         К списку курсов
       </Link>
+
+      {error === "no-lessons" && (
+        <Card className="flex gap-3 border-danger/30 bg-danger/10 p-4">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" />
+          <p className="text-sm leading-relaxed text-text">
+            Курс не опубликован: в нём нет ни одного урока. Добавьте хотя бы один урок —
+            иначе студенты увидят на витрине пустую карточку, а бесплатный курс ещё и
+            автоматически откроется каждому новому студенту навсегда.
+          </p>
+        </Card>
+      )}
 
       {/* ---- header + settings ---- */}
       <Card className="p-5 sm:p-6">
@@ -87,6 +113,15 @@ export default async function AdminCourseDetail({
               <input type="hidden" name="courseId" value={course.id} />
               <SubmitButton>Вернуть из архива</SubmitButton>
             </form>
+          ) : !course.isPublished && !canPublish ? (
+            <div className="max-w-64 text-right">
+              <span className="inline-flex cursor-not-allowed items-center rounded-xl border border-line-strong bg-raised-2 px-4 py-2.5 text-sm font-semibold text-faint">
+                Опубликовать
+              </span>
+              <p className="mt-1.5 text-xs text-faint">
+                Сначала добавьте хотя бы один урок.
+              </p>
+            </div>
           ) : (
             <form action={togglePublish}>
               <input type="hidden" name="courseId" value={course.id} />
@@ -296,9 +331,22 @@ export default async function AdminCourseDetail({
                           />
                         </Field>
                       </div>
-                      <Field label="Содержание урока" hint="теория, шаги, материалы">
+                      <Field
+                        label="Содержание урока"
+                        hint="пустая строка — новый абзац, «- » — пункт списка, ссылки вставляйте целиком"
+                      >
                         <TextArea name="content" defaultValue={l.content} className="min-h-32" />
                       </Field>
+                      {/* Preview of what's SAVED — the owner types plain text and
+                          needs to see that the links/lists actually took. */}
+                      {l.content && (
+                        <details className="rounded-xl border border-line bg-raised/40 p-3.5">
+                          <summary className="cursor-pointer select-none text-xs font-medium text-muted transition-colors hover:text-text">
+                            Как это увидит студент
+                          </summary>
+                          <RichText text={l.content} className="mt-3 text-muted" />
+                        </details>
+                      )}
                       <div className="rounded-xl border border-line bg-raised/50 p-3.5">
                         <Checkbox
                           name="isFree"
