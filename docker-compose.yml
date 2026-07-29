@@ -23,6 +23,10 @@ services:
       db:
         condition: service_healthy
     environment:
+      # Bind the Next.js standalone server to all interfaces. Docker otherwise
+      # sets HOSTNAME to the container id, so the server listens only on the
+      # container IP and the loopback healthcheck (127.0.0.1) can't reach it.
+      HOSTNAME: "0.0.0.0"
       # App connects to the db service over the compose network.
       DATABASE_URL: postgres://${POSTGRES_USER:-oqu}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-oqu}
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
