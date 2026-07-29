@@ -72,8 +72,8 @@ export async function seedIfEmpty(db: DB): Promise<void> {
     },
     {
       id: DEV_USER_ID,
-      fullName: "Нурсултан Сагатов",
-      email: "space.shop578@gmail.com",
+      fullName: "Данияр Ахметов",
+      email: "daniyar.a@gmail.com",
       role: "student",
       rank: "Интегратор II",
       level: 2,
@@ -273,7 +273,7 @@ export async function seedIfEmpty(db: DB): Promise<void> {
 
   // ---- enrollments (access / purchases) ------------------------------------
   await db.insert(enrollments).values([
-    // Нурсултан: creator + programmer (free/included), integrator locked
+    // Данияр: creator + programmer (free/included), integrator locked
     { userId: DEV_USER_ID, courseId: courseId.creator, accessType: "full" },
     { userId: DEV_USER_ID, courseId: courseId.programmer, accessType: "full" },
     { userId: DEV_USER_ID, courseId: courseId.integrator, accessType: "locked" },

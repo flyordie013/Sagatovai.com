@@ -7,7 +7,7 @@ import { cn, formatNumber, pluralize } from "@/lib/utils";
 
 export const metadata = { title: "Рейтинг" };
 
-/** Инициалы из полного имени: «Нурсултан Сагатов» → «НС». */
+/** Инициалы из полного имени: «Данияр Ахметов» → «ДА». */
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   const first = parts[0]?.[0] ?? "";

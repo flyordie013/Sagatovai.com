@@ -23,7 +23,7 @@ export function RegisterForm() {
           autoComplete="name"
           required
           maxLength={120}
-          placeholder="Нурсултан Сагатов"
+          placeholder="Данияр Ахметов"
           className={inputClass}
         />
       </label>

@@ -51,7 +51,7 @@ export function LeadForm({
         <label htmlFor="lead-name" className="mb-1.5 block text-xs font-medium text-muted">
           Как вас зовут
         </label>
-        <input id="lead-name" name="name" required maxLength={120} placeholder="Нурсултан" className={inputBase} />
+        <input id="lead-name" name="name" required maxLength={120} placeholder="Данияр" className={inputBase} />
       </div>
 
       <div>
