@@ -87,6 +87,18 @@ export default async function AdminCourseDetail({
         </Card>
       )}
 
+      {error === "video-url" && (
+        <Card className="flex gap-3 border-danger/30 bg-danger/10 p-4">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" />
+          <p className="text-sm leading-relaxed text-text">
+            Ссылка на видео не сохранена: ссылки на YouTube, Vimeo и Google Drive не
+            поддерживаются — загрузите файл на платформу. Плеер играет только прямые
+            файлы (.mp4, .webm), по ссылке на страницу видеохостинга студент увидит
+            чёрный прямоугольник. Остальные изменения урока сохранены.
+          </p>
+        </Card>
+      )}
+
       {/* ---- header + settings ---- */}
       <Card className="p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -173,6 +185,19 @@ export default async function AdminCourseDetail({
             </Field>
             <Field label="Цена (₸)" hint="0 = бесплатно">
               <TextInput name="price" type="number" min="0" step="1000" defaultValue={course.price} />
+            </Field>
+            {/* Empty field = no rating: the storefront hides the star at 0
+                rather than showing «★ 0». */}
+            <Field label="Рейтинг" hint="от 0 до 5, пусто — без звёздочки">
+              <TextInput
+                name="rating"
+                type="number"
+                min="0"
+                max="5"
+                step="0.1"
+                placeholder="4.8"
+                defaultValue={course.rating > 0 ? course.rating : ""}
+              />
             </Field>
             <div className="flex items-end gap-6">
               <Checkbox name="flagship" value="true" label="Флагман" defaultChecked={course.flagship} />
@@ -311,17 +336,24 @@ export default async function AdminCourseDetail({
                         <TextInput name="description" defaultValue={l.description} placeholder="Одна строка для превью урока" />
                       </Field>
                       <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
-                        <Field
-                          label="Ссылка на видео"
-                          hint="если видео не загружено на платформу"
-                        >
-                          <TextInput
-                            name="videoUrl"
-                            defaultValue={l.videoUrl ?? ""}
-                            placeholder="https://..."
-                            disabled={Boolean(l.videoKey)}
-                          />
-                        </Field>
+                        <div>
+                          <Field
+                            label="Ссылка на видео"
+                            hint="если видео не загружено на платформу"
+                          >
+                            <TextInput
+                              name="videoUrl"
+                              defaultValue={l.videoUrl ?? ""}
+                              placeholder="https://…/lesson.mp4"
+                              disabled={Boolean(l.videoKey)}
+                            />
+                          </Field>
+                          <p className="mt-1.5 text-xs text-faint">
+                            Только прямая ссылка на файл (.mp4, .webm). Ссылки на YouTube,
+                            Vimeo и Google Drive плеер не проигрывает — такое видео
+                            загрузите на платформу кнопкой выше.
+                          </p>
+                        </div>
                         <Field label="Длительность (сек)">
                           <TextInput
                             name="videoDurationSec"

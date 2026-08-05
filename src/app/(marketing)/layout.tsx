@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, MessageCircle } from "lucide-react";
 import { BrandMark } from "@/components/layout/brand";
 import { getSession } from "@/lib/session";
+import { SUPPORT_PHONE_DISPLAY, SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
 
 // Reads the session (cookies) and live course data — render on demand.
 export const dynamic = "force-dynamic";
@@ -61,7 +62,18 @@ export default async function MarketingLayout({ children }: { children: ReactNod
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-[1120px] flex-col gap-2 px-4 py-8 text-sm text-faint sm:flex-row sm:items-center sm:px-6">
           <p>© {new Date().getFullYear()} OQU — обучение с AI-наставником</p>
-          <div className="flex items-center gap-4 sm:ml-auto">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:ml-auto">
+            {/* The only direct contact on the public site — a visitor who does
+                not want to wait for a callback needs somewhere to write. */}
+            <a
+              href={SUPPORT_WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 transition-colors hover:text-muted"
+            >
+              <MessageCircle className="size-4 shrink-0" />
+              <span className="nums">{SUPPORT_PHONE_DISPLAY}</span>
+            </a>
             <Link href="/courses" className="transition-colors hover:text-muted">
               Все курсы
             </Link>

@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { requireUser } from "@/lib/session";
+import { SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
 import { getCourseForStudent } from "@/data/course";
 import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -22,7 +23,6 @@ import { RequestButton } from "../request-button";
 export const metadata = { title: "Курс" };
 
 const ICONS: Record<string, LucideIcon> = { sparkles: Sparkles, bot: Bot, code: Code2 };
-const WHATSAPP = "https://wa.me/77073330241";
 
 export default async function CoursePage({
   params,
@@ -117,7 +117,7 @@ export default async function CoursePage({
           {course.price > 0 && (
             <RequestButton
               courseId={course.id}
-              whatsapp={WHATSAPP}
+              whatsapp={SUPPORT_WHATSAPP_URL}
               alreadyRequested={requested}
             />
           )}
@@ -154,7 +154,7 @@ export default async function CoursePage({
                   {course.price > 0 && (
                     <RequestButton
                       courseId={course.id}
-                      whatsapp={WHATSAPP}
+                      whatsapp={SUPPORT_WHATSAPP_URL}
                       alreadyRequested={requested}
                     />
                   )}

@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { requireStaff } from "@/lib/session";
+import { effectiveStreak } from "@/lib/streak";
 import {
   courses,
   modules,
@@ -393,7 +394,10 @@ export async function listUsers(opts: { q?: string; page?: number } = {}): Promi
       rank: p.rank,
       level: p.level,
       xp: p.xp,
-      currentStreak: p.currentStreak,
+      // The stored column is only rewritten when a lesson is completed, so it
+      // keeps showing a long-broken streak. The student's own cabinet burns it
+      // out — the admin list must show the same number.
+      currentStreak: effectiveStreak(p.currentStreak, p.lastActivityAt),
       courses: eMap.get(p.id) ?? 0,
       completed: cMap.get(p.id) ?? 0,
     })),
@@ -484,7 +488,9 @@ export async function getUserForAdmin(userId: string) {
   const spent = paid.reduce((sum, p) => sum + p.amount, 0);
 
   return {
-    user,
+    // Same burnt-out streak the student sees in their own cabinet — the raw
+    // column lags behind until the next completed lesson.
+    user: { ...user, currentStreak: effectiveStreak(user.currentStreak, user.lastActivityAt) },
     isSelf,
     /** Can this account be deleted at all? */
     canDelete: !isSelf && !lastOwner,

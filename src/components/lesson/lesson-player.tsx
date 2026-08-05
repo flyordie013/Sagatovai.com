@@ -83,9 +83,9 @@ export function LessonPlayer({
     (pct: number, force = false) => {
       const rounded = Math.round(pct);
       if (rounded <= savedPctRef.current) return;
-      // Persist in ~5% steps (or when forced, e.g. on unmount / end) — each
-      // saveProgress re-checks access server-side, so saving every 1% would
-      // hammer the DB through the last fifth of every video.
+      // Persist in ~5% steps (or when forced, e.g. on hide / unmount / end) —
+      // each saveProgress re-checks access server-side, so saving every 1%
+      // would hammer the DB throughout every video.
       if (!force && rounded < 100 && rounded < savedPctRef.current + 5) return;
       savedPctRef.current = rounded;
       void saveProgress(lessonId, rounded);
@@ -113,7 +113,15 @@ export function LessonPlayer({
     const pct = Math.min(100, (watchedSecRef.current / total) * 100);
     watchedPctRef.current = Math.max(watchedPctRef.current, pct);
     setWatchedPct((prev) => (pct > prev ? pct : prev));
-    if (pct >= THRESHOLD) persist(pct);
+    // Persist from the very first percent, not only past the gate: a phone that
+    // is locked or killed mid-lesson must still resume where it stopped. The
+    // ~5% step inside `persist` keeps this to ~20 writes per video.
+    //
+    // The stored figure doubles as the resume point, so it must never run ahead
+    // of the playhead — re-watching a section accumulates more seconds than the
+    // position reflects, which would otherwise resume the student past the part
+    // they went back for.
+    persist(Math.min(pct, (v.currentTime / total) * 100));
   };
 
   // Persist the LATEST progress on unmount (via ref — a stale closure over
@@ -123,6 +131,23 @@ export function LessonPlayer({
     return () => persist(watchedPctRef.current, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Mobile browsers discard a backgrounded tab without ever running the unmount
+  // cleanup above, so the progress also has to be flushed the moment the page
+  // is hidden — locking the phone or switching apps must not lose the lesson.
+  // `pagehide` is dispatched at the window, `visibilitychange` at the document.
+  useEffect(() => {
+    const flush = () => persist(watchedPctRef.current, true);
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [persist]);
 
   async function onComplete() {
     setPending(true);

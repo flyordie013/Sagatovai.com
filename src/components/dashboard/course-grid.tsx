@@ -1,10 +1,8 @@
 import Link from "next/link";
 import { BookOpen, ArrowRight, MessageCircle } from "lucide-react";
 import type { CourseSummary } from "@/types";
+import { SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
 import { CourseCard } from "./course-card";
-
-// Same number as the course page's request block (app/(app)/course/[slug]).
-const WHATSAPP = "https://wa.me/77073330241";
 
 export function CourseGrid({ courses }: { courses: CourseSummary[] }) {
   if (courses.length === 0) {
@@ -29,7 +27,7 @@ export function CourseGrid({ courses }: { courses: CourseSummary[] }) {
             <ArrowRight className="size-4" />
           </Link>
           <a
-            href={WHATSAPP}
+            href={SUPPORT_WHATSAPP_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-line-strong bg-raised px-4 py-3 text-sm font-semibold text-text transition-colors hover:bg-raised-2"

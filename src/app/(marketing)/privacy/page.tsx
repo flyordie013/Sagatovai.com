@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SUPPORT_PHONE_DISPLAY, SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
 
 export const metadata = {
   title: "Политика конфиденциальности",
@@ -6,10 +7,6 @@ export const metadata = {
 };
 
 const UPDATED = "29 июля 2026 г.";
-
-// Same support number as the course pages use for purchase requests.
-const WHATSAPP_URL = "https://wa.me/77073330241";
-const WHATSAPP_LABEL = "+7 707 333 0241";
 
 export default function PrivacyPage() {
   return (
@@ -80,12 +77,12 @@ export default function PrivacyPage() {
             <li>
               WhatsApp:{" "}
               <a
-                href={WHATSAPP_URL}
+                href={SUPPORT_WHATSAPP_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline underline-offset-2 transition-colors hover:text-text"
               >
-                {WHATSAPP_LABEL}
+                {SUPPORT_PHONE_DISPLAY}
               </a>
             </li>
             <li>

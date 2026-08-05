@@ -102,6 +102,22 @@
   }
 }
 
+/* iOS Safari zooms the page in whenever a focused control renders its text
+   below 16px — and never zooms back out, so the layout stays shifted with a
+   horizontal scrollbar for the rest of the session. Our controls are `text-sm`
+   (14px), which trips it on every form. Lift them to 16px on phones only:
+   width covers portrait, the touch query covers landscape, and a desktop
+   pointer never matches either, so density there is untouched. Left unlayered
+   on purpose — it has to outrank Tailwind's `text-*` utilities. Non-text
+   controls are excluded: they never trigger the zoom and some size off em. */
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -1,6 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Sparkles, Bot, Code2, Star, Clock, PlayCircle, type LucideIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Sparkles,
+  Bot,
+  Code2,
+  Star,
+  Clock,
+  PlayCircle,
+  type LucideIcon,
+} from "lucide-react";
 import type { CourseIcon } from "@/types";
 import { getPublicCourse } from "@/data/public";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +89,16 @@ export default async function PublicCoursePage({
             )}
           </div>
 
+          {/* On phones the form lands under the whole curriculum — a screen and
+              a half of scrolling — so the first screen gets its own way in. */}
+          <Link
+            href="#zayavka"
+            className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3.5 text-sm font-semibold text-gold-ink shadow-glow transition-colors hover:bg-gold-soft lg:hidden"
+          >
+            Оставить заявку
+            <ArrowRight className="size-4" />
+          </Link>
+
           {/* ---- curriculum ---- */}
           <section className="mt-10">
             <h2 className="font-display text-xl font-bold">Программа курса</h2>
@@ -111,10 +131,34 @@ export default async function PublicCoursePage({
               ))}
             </div>
           </section>
+
+          {/* Keeps the CTA in reach while the curriculum scrolls. `sticky` at
+              the end of the column rather than `fixed`: it unpins exactly where
+              the form begins, so it covers neither the form nor the footer. */}
+          <div className="sticky bottom-0 z-20 -mx-4 mt-10 flex items-center gap-3 border-t border-line bg-ink/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:hidden">
+            <div className="min-w-0">
+              <p className="truncate font-display text-sm font-bold">{course.title}</p>
+              {/* Paid courses are sold through a manager — no price tag here,
+                  same as on the catalogue card. */}
+              <p className="text-xs font-semibold">
+                {course.price > 0 ? (
+                  <span className="text-gold">По заявке</span>
+                ) : (
+                  <span className="text-teal">Бесплатно</span>
+                )}
+              </p>
+            </div>
+            <Link
+              href="#zayavka"
+              className="ml-auto shrink-0 rounded-xl bg-gold px-4 py-2.5 text-sm font-semibold text-gold-ink shadow-glow transition-colors hover:bg-gold-soft"
+            >
+              Оставить заявку
+            </Link>
+          </div>
         </div>
 
         {/* ---- sticky CTA ---- */}
-        <aside className="lg:sticky lg:top-24">
+        <aside id="zayavka" className="scroll-mt-20 lg:sticky lg:top-24">
           <div className="rounded-2xl border border-line bg-gradient-to-b from-raised to-surface p-5 shadow-card ring-inset-hair sm:p-6">
             <p className="font-display text-lg font-bold">
               {course.price > 0 ? "Записаться на курс" : "Начать бесплатно"}

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { randomBytes } from "node:crypto";
 import { and, asc, eq, ne, sql } from "drizzle-orm";
@@ -26,6 +27,7 @@ import { hashPassword } from "@/lib/password";
 import { provisionNewStudent } from "@/lib/provision";
 import { deleteVideo } from "@/lib/storage";
 import { levelForXp, rankForLevel } from "@/lib/leveling";
+import { sendEmail, emailLayout } from "@/lib/email";
 import { MIN_PASSWORD } from "@/lib/auth-rules";
 
 /** Removes uploaded video files for a set of storage keys (best-effort). */
@@ -48,6 +50,26 @@ function int(fd: FormData, key: string, fallback = 0): number {
 function bool(fd: FormData, key: string): boolean {
   const v = fd.get(key);
   return v != null && v !== "false" && v !== "0";
+}
+/** User-supplied text is interpolated into email HTML — escape it first. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+/**
+ * Course rating, 0–5 with one decimal. An empty field means "no rating yet" → 0,
+ * which is exactly what the storefront hides the stars on. Out-of-range input is
+ * clamped instead of rejected, so a typo can never publish a 50-star course.
+ */
+function rating(fd: FormData, key: string): number {
+  const raw = str(fd, key).replace(",", ".");
+  if (!raw) return 0;
+  const v = Number.parseFloat(raw);
+  if (!Number.isFinite(v)) return 0;
+  return Math.min(5, Math.max(0, Math.round(v * 10) / 10));
 }
 
 function slugify(input: string): string {
@@ -180,6 +202,7 @@ export async function updateCourse(formData: FormData): Promise<void> {
       icon: ((str(formData, "icon") || "sparkles") as Icon),
       weeks: int(formData, "weeks"),
       price: int(formData, "price"),
+      rating: rating(formData, "rating"),
       flagship: bool(formData, "flagship"),
       isPublished,
     })
@@ -353,6 +376,21 @@ export async function deleteModule(formData: FormData): Promise<void> {
 
 /* ------------------------------ lessons ------------------------------ */
 
+/**
+ * The lesson player is a plain `<video>` tag: it plays a media FILE, not a watch
+ * page. A YouTube/Vimeo/Google Drive link saves fine and then shows the student
+ * a black rectangle, so such links are refused here — the owner uploads the file
+ * instead. Signed CDN links keep working: the query string is stripped before
+ * the extension is checked.
+ */
+// `.m3u8` is here because Safari — i.e. most of the audience — plays HLS
+// natively in a plain <video>, which is exactly what the lesson page renders.
+const DIRECT_VIDEO_FILE = /\.(mp4|webm|ogv|ogg|mov|m4v|m3u8)$/i;
+
+function isPlayableVideoUrl(url: string): boolean {
+  return DIRECT_VIDEO_FILE.test(url.split(/[?#]/)[0]);
+}
+
 export async function createLesson(formData: FormData): Promise<void> {
   await requireStaff();
   const db = await getDb();
@@ -374,19 +412,25 @@ export async function updateLesson(formData: FormData): Promise<void> {
   const title = str(formData, "title");
   if (!id || !title) return; // never wipe the title with a blank submit
 
+  // A link the player can't play is dropped, not stored — the rest of the edit
+  // still saves and the redirect below explains what happened.
+  const videoUrl = str(formData, "videoUrl") || null;
+  const badVideoUrl = videoUrl !== null && !isPlayableVideoUrl(videoUrl);
+
   await db
     .update(lessons)
     .set({
       title,
       description: str(formData, "description"),
       content: str(formData, "content"),
-      videoUrl: str(formData, "videoUrl") || null,
+      ...(badVideoUrl ? {} : { videoUrl }),
       videoDurationSec: int(formData, "videoDurationSec"),
       isFree: bool(formData, "isFree"),
     })
     .where(eq(lessons.id, id));
 
   revalidateCourse(courseId);
+  if (badVideoUrl) redirect(`/admin/courses/${courseId}?error=video-url`);
 }
 
 /** Moves a lesson up/down within its module (position-reindex). */
@@ -850,6 +894,17 @@ export async function deleteUser(formData: FormData): Promise<void> {
 
 /* --------------------------- access / payments --------------------------- */
 
+/**
+ * Base address for links inside outgoing mail. APP_URL is the single source of
+ * truth (same rule as the password reset) — in production we'd rather send no
+ * letter than one pointing at the wrong host.
+ */
+function appBaseUrl(): string | null {
+  const configured = process.env.APP_URL?.replace(/\/$/, "");
+  if (configured) return configured;
+  return process.env.NODE_ENV === "production" ? null : "http://localhost:3000";
+}
+
 /** Declines an open purchase request without granting access. */
 export async function declineRequest(formData: FormData): Promise<void> {
   await requireStaff();
@@ -919,7 +974,7 @@ export async function grantAccess(formData: FormData): Promise<void> {
   // Resolve the amount: clamp to >= 0, and when left at 0 fall back to the
   // course's list price so a manual grant still books realistic revenue.
   const [course] = await db
-    .select({ price: courses.price })
+    .select({ price: courses.price, title: courses.title, slug: courses.slug })
     .from(courses)
     .where(eq(courses.id, courseId))
     .limit(1);
@@ -929,6 +984,15 @@ export async function grantAccess(formData: FormData): Promise<void> {
   const rawAmount = str(formData, "amount");
   const amount =
     rawAmount === "" ? course.price : Math.max(0, Number.parseInt(rawAmount, 10) || 0);
+
+  // Only a genuinely NEW opening earns an email — a re-grant (correcting the
+  // amount or the payment method) must not mail the student the same news again.
+  const [prior] = await db
+    .select({ accessType: enrollments.accessType })
+    .from(enrollments)
+    .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId)))
+    .limit(1);
+  const opensAccess = prior?.accessType !== "full";
 
   // grant full access (idempotent)
   await db
@@ -982,4 +1046,45 @@ export async function grantAccess(formData: FormData): Promise<void> {
   revalidatePath("/admin/requests");
   revalidatePath(`/admin/users/${userId}`);
   revalidatePath("/dashboard");
+
+  // Tell the student the course is open — until now they had to guess. Runs
+  // AFTER the response and inside a try/catch: a slow or broken mail provider
+  // must never delay the grant, and must never fail it.
+  if (!opensAccess) return;
+  after(async () => {
+    try {
+      const base = appBaseUrl();
+      if (!base) {
+        console.error("[grant] APP_URL is not set in production — access email not sent.");
+        return;
+      }
+      const [student] = await db
+        .select({ email: profiles.email, name: profiles.fullName })
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1);
+      if (!student) return;
+
+      const link = `${base}/course/${course.slug}`;
+      const hello = student.name ? `, ${student.name.split(" ")[0]}` : "";
+      // The student types their own name — it must not be able to inject markup
+      // into the HTML part of the email.
+      const helloHtml = escapeHtml(hello);
+      const titleHtml = escapeHtml(course.title);
+      await sendEmail({
+        to: student.email,
+        subject: `Доступ к курсу «${course.title}» открыт — OQU`,
+        text: `Здравствуйте${hello}!\n\nМы открыли вам доступ к курсу «${course.title}». Он уже ждёт вас в личном кабинете:\n${link}\n\nХорошей учёбы!`,
+        html: emailLayout(
+          "Доступ к курсу открыт",
+          `<p>Здравствуйте${helloHtml}!</p>
+           <p>Мы открыли вам доступ к курсу <strong style="color:#f4f2ec">«${titleHtml}»</strong> — он уже в вашем личном кабинете.</p>
+           <p style="margin:20px 0"><a href="${link}" style="display:inline-block;background:#f5a524;color:#1a1206;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:12px">Перейти к курсу</a></p>
+           <p style="color:#6b6b76;font-size:13px">Если кнопка не работает, откройте ссылку: ${link}</p>`,
+        ),
+      });
+    } catch (err) {
+      console.error("[grant] access email failed:", err);
+    }
+  });
 }

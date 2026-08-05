@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { getAdminStats } from "@/data/admin";
 import { StatCard } from "@/components/admin/stat-card";
+import { ServiceStatus } from "@/components/admin/service-status";
 import { Card } from "@/components/ui/card";
 import { formatNumber } from "@/lib/utils";
 
@@ -35,6 +36,9 @@ export default async function AdminDashboard() {
           Ключевые метрики по пользователям, контенту и продажам.
         </p>
       </header>
+
+      {/* Silently degraded services — the owner sees nothing wrong otherwise. */}
+      <ServiceStatus />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <StatCard

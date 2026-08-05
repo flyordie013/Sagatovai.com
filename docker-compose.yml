@@ -53,7 +53,15 @@ services:
       MENTOR_MODEL: ${MENTOR_MODEL}
       RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM}
+      # Contacts shown on the site and the inbox for new-lead notifications.
+      # Blank → the defaults compiled into src/lib/contacts.ts.
+      SUPPORT_WHATSAPP: ${SUPPORT_WHATSAPP}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL}
+      OWNER_EMAIL: ${OWNER_EMAIL}
       MAX_VIDEO_MB: ${MAX_VIDEO_MB}
+      # Free space the uploader refuses to eat into (MB). Postgres shares this
+      # disk: filling it to the last byte takes the whole site down.
+      MIN_FREE_DISK_MB: ${MIN_FREE_DISK_MB}
     volumes:
       # Uploaded videos persist across redeploys.
       - videos:/app/storage

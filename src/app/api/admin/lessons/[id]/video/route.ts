@@ -5,6 +5,7 @@ import { requireStaff } from "@/lib/session";
 import {
   putVideo,
   deleteVideo,
+  StorageError,
   isAllowedVideoType,
   allowedVideoTypes,
   maxVideoBytes,
@@ -73,8 +74,16 @@ export async function POST(
 
   let stored;
   try {
-    stored = await putVideo(request.body, mimeType);
+    // Passing the declared size lets storage refuse up front when the disk
+    // cannot fit the file, instead of dying halfway through the write.
+    stored = await putVideo(
+      request.body,
+      mimeType,
+      Number.isFinite(declared) ? declared : undefined,
+    );
   } catch (err) {
+    // Disk full and friends already carry a Russian message for the owner.
+    if (err instanceof StorageError) return bad(err.userMessage, err.status);
     const msg = err instanceof Error ? err.message : "";
     if (msg === "TOO_LARGE") return bad("Файл слишком большой", 413);
     if (msg === "EMPTY") return bad("Файл пустой");

@@ -22,6 +22,27 @@ const SKIP = 10;
 const PROBE_TIME = 1e101;
 /** Give up on the probe rather than leave playback parked at the end. */
 const PROBE_TIMEOUT_MS = 8_000;
+/** How long a lone tap waits to see whether a second one follows it. */
+const DOUBLE_TAP_MS = 280;
+
+/**
+ * Safari on iPhone cannot put an arbitrary element into fullscreen — only the
+ * <video> itself, through this legacy API. Typed here instead of widening the
+ * global DOM lib.
+ */
+type FullscreenVideo = HTMLVideoElement & {
+  webkitSupportsFullscreen?: boolean;
+  webkitDisplayingFullscreen?: boolean;
+  webkitEnterFullscreen?: () => void;
+  webkitExitFullscreen?: () => void;
+};
+
+/**
+ * How this browser can go fullscreen: `element` = the standard API on our
+ * wrapper (keeps our own controls), `video` = the iOS native player, `none` =
+ * not available at all, in which case the button is not rendered.
+ */
+type FullscreenMode = "none" | "element" | "video";
 
 function fmt(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return "0:00";
@@ -63,6 +84,7 @@ export function VideoPlayer({
   const wrapRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumed = useRef(false);
   // Screen recordings (MediaRecorder) carry no duration in their header and the
   // browser reports `Infinity`. Seeking past the end forces it to scan the file
@@ -84,6 +106,9 @@ export function VideoPlayer({
   const [rate, setRate] = useState(1);
   const [speedOpen, setSpeedOpen] = useState(false);
   const [full, setFull] = useState(false);
+  // Resolved on the client only — the server has no way to know, and rendering
+  // a button that does nothing is worse than rendering none.
+  const [fsMode, setFsMode] = useState<FullscreenMode>("none");
   const [uiVisible, setUiVisible] = useState(true);
   const [started, setStarted] = useState(false);
 
@@ -166,11 +191,42 @@ export function VideoPlayer({
     seekToRatio((e.clientX - rect.left) / rect.width);
   }
 
+  /**
+   * iOS reports `webkitSupportsFullscreen` only once metadata has loaded, so
+   * this runs again from `onLoadedMetadata` and not just on mount.
+   */
+  const detectFullscreen = useCallback(() => {
+    if (
+      document.fullscreenEnabled &&
+      typeof wrapRef.current?.requestFullscreen === "function"
+    ) {
+      setFsMode("element");
+      return;
+    }
+    const v: FullscreenVideo | null = videoRef.current;
+    if (typeof v?.webkitEnterFullscreen === "function" && v.webkitSupportsFullscreen) {
+      setFsMode("video");
+      return;
+    }
+    setFsMode("none");
+  }, []);
+
   async function toggleFullscreen() {
-    const el = wrapRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
-    else await el.requestFullscreen().catch(() => {});
+    if (fsMode === "element") {
+      const el = wrapRef.current;
+      if (!el) return;
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+      else await el.requestFullscreen().catch(() => {});
+      return;
+    }
+    if (fsMode === "video") {
+      // iOS hands playback to the system player — our overlay is not shown
+      // there, and it closes itself with the standard "Done" button.
+      const v: FullscreenVideo | null = videoRef.current;
+      if (!v) return;
+      if (v.webkitDisplayingFullscreen) v.webkitExitFullscreen?.();
+      else v.webkitEnterFullscreen?.();
+    }
   }
 
   async function togglePip() {
@@ -185,17 +241,54 @@ export function VideoPlayer({
   }
 
   useEffect(() => {
+    detectFullscreen();
+    const v = videoRef.current;
     const onFs = () => setFull(Boolean(document.fullscreenElement));
+    const onEnterNative = () => setFull(true);
+    const onExitNative = () => setFull(false);
     document.addEventListener("fullscreenchange", onFs);
-    return () => document.removeEventListener("fullscreenchange", onFs);
-  }, []);
+    // Fired by the iOS native player when it opens and closes.
+    v?.addEventListener("webkitbeginfullscreen", onEnterNative);
+    v?.addEventListener("webkitendfullscreen", onExitNative);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFs);
+      v?.removeEventListener("webkitbeginfullscreen", onEnterNative);
+      v?.removeEventListener("webkitendfullscreen", onExitNative);
+    };
+  }, [detectFullscreen]);
 
   useEffect(() => {
     return () => {
       if (hideTimer.current) clearTimeout(hideTimer.current);
+      if (tapTimer.current) clearTimeout(tapTimer.current);
       if (probe.current.timer) clearTimeout(probe.current.timer);
     };
   }, []);
+
+  /**
+   * Touch: a double tap on either half seeks ±10s (as on YouTube), a lone tap
+   * toggles playback — but only once the double-tap window has passed, so the
+   * first tap of a pair does not flash a pause. Mouse input stays instant.
+   */
+  function onVideoPointerUp(e: React.PointerEvent<HTMLVideoElement>) {
+    if (e.button !== 0) return;
+    if (e.pointerType !== "touch" || total <= 0) {
+      togglePlay();
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const forward = e.clientX - rect.left >= rect.width / 2;
+    if (tapTimer.current) {
+      clearTimeout(tapTimer.current);
+      tapTimer.current = null;
+      seekBy(forward ? SKIP : -SKIP);
+      return;
+    }
+    tapTimer.current = setTimeout(() => {
+      tapTimer.current = null;
+      togglePlay();
+    }, DOUBLE_TAP_MS);
+  }
 
   function onKeyDown(e: React.KeyboardEvent) {
     // Don't hijack typing in any nested control.
@@ -294,8 +387,10 @@ export function VideoPlayer({
         src={src}
         playsInline
         preload="metadata"
-        className="aspect-video w-full bg-black"
-        onClick={togglePlay}
+        // touch-manipulation: keeps iOS from reading the seek gesture below as
+        // a double-tap-to-zoom.
+        className="aspect-video w-full touch-manipulation bg-black"
+        onPointerUp={onVideoPointerUp}
         onPlay={(e) => {
           // The student is watching now — never yank them back mid-playback.
           endProbe(e.currentTarget);
@@ -335,6 +430,8 @@ export function VideoPlayer({
             v.currentTime = initialTime;
           }
           resumed.current = true;
+          // iOS only admits it can play fullscreen once metadata is in.
+          detectFullscreen();
           onLoadedMetadata?.(v);
         }}
         onTimeUpdate={(e) => {
@@ -404,7 +501,7 @@ export function VideoPlayer({
           onPointerMove={(e) => {
             if (e.buttons === 1) pointerSeek(e);
           }}
-          className="group/bar relative mb-2 h-4 cursor-pointer touch-none"
+          className="relative mb-2 h-4 cursor-pointer touch-none"
         >
           <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-white/20">
             <div className="h-full bg-white/25" style={{ width: `${bufPct}%` }} />
@@ -413,25 +510,29 @@ export function VideoPlayer({
             className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-gold"
             style={{ width: `${pct}%` }}
           />
+          {/* Always visible: a hover-only handle is invisible on a touchscreen. */}
           <div
-            className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold opacity-0 shadow transition-opacity group-hover/bar:opacity-100"
+            className="pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold shadow sm:size-3"
             style={{ left: `${pct}%` }}
           />
         </div>
 
-        <div className="flex items-center gap-1 text-white">
-          <button type="button" onClick={togglePlay} aria-label={playing ? "Пауза" : "Играть"} className="grid size-9 place-items-center rounded-lg transition-colors hover:bg-white/15">
+        <div className="flex items-center gap-0.5 text-white sm:gap-1">
+          <button type="button" onClick={togglePlay} aria-label={playing ? "Пауза" : "Играть"} className="grid size-9 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15">
             {playing ? <Pause className="size-5" fill="currentColor" /> : <Play className="size-5" fill="currentColor" />}
           </button>
 
-          <button type="button" onClick={() => seekBy(-SKIP)} aria-label="Назад 10 секунд" className="hidden size-9 place-items-center rounded-lg transition-colors hover:bg-white/15 sm:grid">
+          {/* Shown on phones too — most students watch there, and a video with
+              no way to rewind is unusable. Slightly tighter than on desktop so
+              the row still fits a 375px screen. */}
+          <button type="button" onClick={() => seekBy(-SKIP)} aria-label="Назад 10 секунд" className="grid size-8 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15 sm:size-9">
             <RotateCcw className="size-[18px]" />
           </button>
-          <button type="button" onClick={() => seekBy(SKIP)} aria-label="Вперёд 10 секунд" className="hidden size-9 place-items-center rounded-lg transition-colors hover:bg-white/15 sm:grid">
+          <button type="button" onClick={() => seekBy(SKIP)} aria-label="Вперёд 10 секунд" className="grid size-8 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15 sm:size-9">
             <RotateCw className="size-[18px]" />
           </button>
 
-          <div className="group/vol flex items-center">
+          <div className="group/vol flex shrink-0 items-center">
             <button type="button" onClick={toggleMute} aria-label={muted ? "Включить звук" : "Выключить звук"} className="grid size-9 place-items-center rounded-lg transition-colors hover:bg-white/15">
               {muted || volume === 0 ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
             </button>
@@ -447,17 +548,17 @@ export function VideoPlayer({
             />
           </div>
 
-          <span className="nums ml-1.5 font-mono text-xs text-white/90">
+          <span className="nums ml-1 min-w-0 truncate font-mono text-[11px] text-white/90 sm:ml-1.5 sm:text-xs">
             {fmt(current)} <span className="text-white/50">/ {fmt(total)}</span>
           </span>
 
-          <div className="relative ml-auto">
+          <div className="relative ml-auto shrink-0">
             <button
               type="button"
               onClick={() => setSpeedOpen((s) => !s)}
               aria-label="Скорость воспроизведения"
               aria-expanded={speedOpen}
-              className="flex h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold transition-colors hover:bg-white/15"
+              className="flex h-9 items-center gap-1 rounded-lg px-1.5 text-xs font-semibold transition-colors hover:bg-white/15 sm:px-2"
             >
               <Gauge className="size-4" />
               {rate}×
@@ -481,12 +582,16 @@ export function VideoPlayer({
             )}
           </div>
 
-          <button type="button" onClick={togglePip} aria-label="Мини-плеер" className="hidden size-9 place-items-center rounded-lg transition-colors hover:bg-white/15 sm:grid">
+          <button type="button" onClick={togglePip} aria-label="Мини-плеер" className="hidden size-9 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15 sm:grid">
             <PictureInPicture2 className="size-[18px]" />
           </button>
-          <button type="button" onClick={toggleFullscreen} aria-label="На весь экран" className="grid size-9 place-items-center rounded-lg transition-colors hover:bg-white/15">
-            {full ? <Minimize className="size-5" /> : <Maximize className="size-5" />}
-          </button>
+          {/* Hidden where no fullscreen API exists at all, rather than offering
+              a button that silently does nothing. */}
+          {fsMode !== "none" && (
+            <button type="button" onClick={toggleFullscreen} aria-label="На весь экран" className="grid size-9 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15">
+              {full ? <Minimize className="size-5" /> : <Maximize className="size-5" />}
+            </button>
+          )}
         </div>
       </div>
     </div>
