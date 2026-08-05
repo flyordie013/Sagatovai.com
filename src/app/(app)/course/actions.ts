@@ -8,6 +8,7 @@ import { courses, enrollments, payments, profiles } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { sendEmail, emailLayout } from "@/lib/email";
 import { OWNER_NOTIFY_EMAIL } from "@/lib/contacts";
+import { isPaymentConfigured } from "@/lib/payment";
 import { formatNumber } from "@/lib/utils";
 
 export interface RequestResult {
@@ -47,6 +48,9 @@ export async function createPurchaseRequest(courseId: number): Promise<RequestRe
     .limit(1);
   if (enr?.a === "full") return { ok: true, already: true };
 
+  // One open request per student per course. A second click (or a return to the
+  // page, where the button re-appears until the data refreshes) reports success
+  // without inserting a duplicate row for the owner to sort out.
   const [existing] = await db
     .select({ id: payments.id })
     .from(payments)
@@ -60,7 +64,11 @@ export async function createPurchaseRequest(courseId: number): Promise<RequestRe
     .limit(1);
   if (existing) return { ok: true, already: true };
 
-  const note = "Заявка из каталога";
+  // Tells the owner which ending the student actually saw, so they know whether
+  // to expect a receipt or to make the first move themselves.
+  const note = isPaymentConfigured
+    ? "Заявка из каталога. Студенту показаны сумма и реквизиты — ожидаем чек."
+    : "Заявка из каталога";
   await db.insert(payments).values({
     userId,
     courseId,

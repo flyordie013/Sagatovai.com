@@ -10,15 +10,20 @@ import {
   Bot,
   Code2,
   Trophy,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
+import { PAYMENT, isPaymentConfigured, receiptWhatsAppUrl } from "@/lib/payment";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { profiles } from "@/db/schema";
 import { getCourseForStudent } from "@/data/course";
 import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { cn, pluralize } from "@/lib/utils";
-import { RequestButton } from "../request-button";
+import { RequestButton, type PaymentPanel } from "../request-button";
 
 export const metadata = { title: "Курс" };
 
@@ -41,6 +46,34 @@ export default async function CoursePage({
   // Truly nothing to show only when the student neither owns the course nor has
   // any free preview lesson to watch.
   const locked = !owns && freeLessons === 0;
+
+  // Fast path: with payment details configured, sending a request ends on a
+  // screen showing the price and where to transfer, instead of waiting for the
+  // owner to write. The student's name is only needed for the pre-filled
+  // WhatsApp receipt message, so it's fetched only when that screen can appear.
+  const forSale = !owns && course.price > 0;
+  let payment: PaymentPanel | null = null;
+  if (forSale && isPaymentConfigured) {
+    // Full name + email, not the first name getCurrentUser() returns: the owner
+    // matches this message against a row in /admin/requests by hand.
+    const db = await getDb();
+    const [me] = await db
+      .select({ fullName: profiles.fullName, email: profiles.email })
+      .from(profiles)
+      .where(eq(profiles.id, userId))
+      .limit(1);
+    payment = {
+      ...PAYMENT,
+      receiptUrl: receiptWhatsAppUrl({
+        courseTitle: course.title,
+        studentName: me?.fullName ?? "",
+        studentEmail: me?.email,
+        amount: course.price,
+      }),
+    };
+  }
+  // Request already saved AND we can tell the student what to do with it.
+  const awaitingPayment = requested && payment !== null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -106,19 +139,27 @@ export default async function CoursePage({
       {locked ? (
         <Card className="p-6 text-center">
           <div className="mx-auto grid size-12 place-items-center rounded-xl border border-line-strong bg-white/5 text-muted">
-            <Lock className="size-6" />
+            {awaitingPayment ? <Wallet className="size-6" /> : <Lock className="size-6" />}
           </div>
-          <h2 className="mt-3 font-display text-lg font-bold">Курс недоступен</h2>
+          <h2 className="mt-3 font-display text-lg font-bold">
+            {awaitingPayment ? "Остался один шаг" : "Курс недоступен"}
+          </h2>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-            {course.price > 0
-              ? "Это платный курс. Чтобы получить доступ, свяжитесь с менеджером."
-              : "У вас пока нет доступа к этому курсу."}
+            {awaitingPayment
+              ? "Ниже — сумма и реквизиты для перевода."
+              : course.price > 0
+                ? payment
+                  ? "Это платный курс. Оставьте заявку — сразу покажем сумму и куда перевести оплату."
+                  : "Это платный курс. Чтобы получить доступ, свяжитесь с менеджером."
+                : "У вас пока нет доступа к этому курсу."}
           </p>
           {course.price > 0 && (
             <RequestButton
               courseId={course.id}
               whatsapp={SUPPORT_WHATSAPP_URL}
               alreadyRequested={requested}
+              price={course.price}
+              payment={payment}
             />
           )}
         </Card>
@@ -148,14 +189,19 @@ export default async function CoursePage({
                     бесплатно
                   </p>
                   <p className="mt-1 text-sm text-muted">
-                    Посмотрите вводные уроки, а чтобы открыть остальные — оставьте заявку,
-                    мы свяжемся и откроем полный доступ.
+                    {awaitingPayment
+                      ? "Остальные уроки откроем после оплаты — сумма и реквизиты ниже."
+                      : payment
+                        ? "Посмотрите вводные уроки, а чтобы открыть остальные — оставьте заявку: сразу покажем сумму и куда перевести оплату."
+                        : "Посмотрите вводные уроки, а чтобы открыть остальные — оставьте заявку, мы свяжемся и откроем полный доступ."}
                   </p>
                   {course.price > 0 && (
                     <RequestButton
                       courseId={course.id}
                       whatsapp={SUPPORT_WHATSAPP_URL}
                       alreadyRequested={requested}
+                      price={course.price}
+                      payment={payment}
                     />
                   )}
                 </div>

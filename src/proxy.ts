@@ -7,7 +7,17 @@ import { verifySessionToken, isStaff, SESSION_COOKIE } from "@/lib/session-token
  * matcher requires a session. Keep this list tight: each entry is a page a
  * stranger on the internet can read.
  */
-const PUBLIC_EXACT = new Set(["/", "/courses", "/privacy"]);
+const PUBLIC_EXACT = new Set([
+  "/",
+  "/courses",
+  "/privacy",
+  // Legal pages a buyer has to be able to read *before* creating an account:
+  // contacts, the public offer and the refund terms. /offer and /refund answer
+  // 404 on their own while LEGAL_* is unset (see src/lib/legal.ts).
+  "/contacts",
+  "/offer",
+  "/refund",
+]);
 const PUBLIC_PREFIXES = ["/courses/"];
 
 function isPublic(pathname: string): boolean {

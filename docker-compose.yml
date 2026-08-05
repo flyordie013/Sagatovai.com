@@ -58,6 +58,30 @@ services:
       SUPPORT_WHATSAPP: ${SUPPORT_WHATSAPP}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL}
       OWNER_EMAIL: ${OWNER_EMAIL}
+      # Seller details and refund terms behind /offer and /refund. Blank → those
+      # pages 404 and stay out of the footer and sitemap, on purpose: an offer
+      # with invented БИН/address is worse than a missing page.
+      LEGAL_ENTITY_TYPE: ${LEGAL_ENTITY_TYPE}
+      LEGAL_ENTITY_NAME: ${LEGAL_ENTITY_NAME}
+      LEGAL_ID: ${LEGAL_ID}
+      LEGAL_ID_LABEL: ${LEGAL_ID_LABEL}
+      LEGAL_ADDRESS: ${LEGAL_ADDRESS}
+      LEGAL_PHONE: ${LEGAL_PHONE}
+      LEGAL_EMAIL: ${LEGAL_EMAIL}
+      LEGAL_BANK_NAME: ${LEGAL_BANK_NAME}
+      LEGAL_BANK_BIC: ${LEGAL_BANK_BIC}
+      LEGAL_BANK_IBAN: ${LEGAL_BANK_IBAN}
+      LEGAL_UPDATED: ${LEGAL_UPDATED}
+      LEGAL_ACCESS_MONTHS: ${LEGAL_ACCESS_MONTHS}
+      LEGAL_REFUND_DAYS: ${LEGAL_REFUND_DAYS}
+      LEGAL_REFUND_PROGRESS_PERCENT: ${LEGAL_REFUND_PROGRESS_PERCENT}
+      LEGAL_REFUND_PAYOUT_DAYS: ${LEGAL_REFUND_PAYOUT_DAYS}
+      # Manual-payment details shown right after a purchase request. Blank →
+      # the student sees the old «менеджер свяжется с вами» text instead.
+      KASPI_NUMBER: ${KASPI_NUMBER}
+      KASPI_LINK: ${KASPI_LINK}
+      KASPI_RECIPIENT: ${KASPI_RECIPIENT}
+      PAYMENT_NOTE: ${PAYMENT_NOTE}
       MAX_VIDEO_MB: ${MAX_VIDEO_MB}
       # Free space the uploader refuses to eat into (MB). Postgres shares this
       # disk: filling it to the last byte takes the whole site down.

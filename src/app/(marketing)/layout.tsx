@@ -4,6 +4,7 @@ import { ArrowRight, MessageCircle } from "lucide-react";
 import { BrandMark } from "@/components/layout/brand";
 import { getSession } from "@/lib/session";
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
+import { isLegalConfigured, isRefundConfigured } from "@/lib/legal";
 
 // Reads the session (cookies) and live course data — render on demand.
 export const dynamic = "force-dynamic";
@@ -77,6 +78,21 @@ export default async function MarketingLayout({ children }: { children: ReactNod
             <Link href="/courses" className="transition-colors hover:text-muted">
               Все курсы
             </Link>
+            <Link href="/contacts" className="transition-colors hover:text-muted">
+              Контакты
+            </Link>
+            {/* Legal pages exist only once the owner has filled LEGAL_* in —
+                linking to a 404 is worse than not linking at all. */}
+            {isLegalConfigured && (
+              <Link href="/offer" className="transition-colors hover:text-muted">
+                Оферта
+              </Link>
+            )}
+            {isRefundConfigured && (
+              <Link href="/refund" className="transition-colors hover:text-muted">
+                Возврат
+              </Link>
+            )}
             <Link href="/privacy" className="transition-colors hover:text-muted">
               Конфиденциальность
             </Link>
