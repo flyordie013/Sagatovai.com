@@ -18,6 +18,10 @@ import { cn } from "@/lib/utils";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 const SKIP = 10;
+/** Seek target that reveals the real end of a header-less file (see `probe`). */
+const PROBE_TIME = 1e101;
+/** Give up on the probe rather than leave playback parked at the end. */
+const PROBE_TIMEOUT_MS = 8_000;
 
 function fmt(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return "0:00";
@@ -39,6 +43,7 @@ function fmt(sec: number): string {
 export function VideoPlayer({
   src,
   initialTime = 0,
+  durationHint = 0,
   onTick,
   onEnded,
   onError,
@@ -46,9 +51,12 @@ export function VideoPlayer({
 }: {
   src: string;
   initialTime?: number;
+  /** Lesson length from the DB, used when the file itself carries none. */
+  durationHint?: number;
   onTick?: (video: HTMLVideoElement) => void;
   onEnded?: () => void;
   onError?: () => void;
+  /** Also fires again once a missing duration has been recovered. */
   onLoadedMetadata?: (video: HTMLVideoElement) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -56,6 +64,15 @@ export function VideoPlayer({
   const barRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumed = useRef(false);
+  // Screen recordings (MediaRecorder) carry no duration in their header and the
+  // browser reports `Infinity`. Seeking past the end forces it to scan the file
+  // and emit a `durationchange` with the real value — same trick the uploader
+  // uses. Runs at most once, before the student starts watching.
+  const probe = useRef<{
+    state: "idle" | "running" | "done";
+    restoreTo: number;
+    timer: ReturnType<typeof setTimeout> | null;
+  }>({ state: "idle", restoreTo: 0, timer: null });
 
   const [playing, setPlaying] = useState(false);
   const [waiting, setWaiting] = useState(false);
@@ -70,6 +87,10 @@ export function VideoPlayer({
   const [uiVisible, setUiVisible] = useState(true);
   const [started, setStarted] = useState(false);
 
+  // Effective length: what the file reports, else the value the owner stored on
+  // the lesson. 0 means "still unknown" — every readout below degrades to it.
+  const total = duration > 0 ? duration : durationHint;
+
   const showUi = useCallback(() => {
     setUiVisible(true);
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -78,6 +99,38 @@ export function VideoPlayer({
       if (videoRef.current && !videoRef.current.paused) setUiVisible(false);
     }, 2600);
   }, []);
+
+  function startProbe(v: HTMLVideoElement) {
+    probe.current = {
+      state: "running",
+      restoreTo: initialTime,
+      timer: setTimeout(() => endProbe(v), PROBE_TIMEOUT_MS),
+    };
+    try {
+      v.currentTime = PROBE_TIME; // clamped to the end, which reveals the duration
+    } catch {
+      endProbe(v); // not seekable — nothing more to try
+    }
+  }
+
+  /** Leaves probe mode: rewinds out of the huge seek and re-announces metadata. */
+  function endProbe(v: HTMLVideoElement) {
+    const { state, restoreTo, timer } = probe.current;
+    if (state !== "running") return;
+    if (timer) clearTimeout(timer);
+    probe.current = { state: "done", restoreTo: 0, timer: null };
+
+    // Back to where the student left off (never past the very end), else start.
+    const to = restoreTo > 1 && restoreTo < v.duration - 2 ? restoreTo : 0;
+    try {
+      v.currentTime = to;
+    } catch {
+      /* seek rejected — leave playback where it is */
+    }
+    setCurrent(v.currentTime);
+    setDuration(Number.isFinite(v.duration) ? v.duration : 0);
+    onLoadedMetadata?.(v);
+  }
 
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
@@ -90,18 +143,21 @@ export function VideoPlayer({
   const seekBy = useCallback(
     (delta: number) => {
       const v = videoRef.current;
-      if (!v || !Number.isFinite(v.duration)) return;
-      v.currentTime = Math.min(Math.max(0, v.currentTime + delta), v.duration);
+      if (!v || total <= 0) return;
+      v.currentTime = Math.min(Math.max(0, v.currentTime + delta), total);
       showUi();
     },
-    [showUi],
+    [showUi, total],
   );
 
-  const seekToRatio = useCallback((ratio: number) => {
-    const v = videoRef.current;
-    if (!v || !Number.isFinite(v.duration)) return;
-    v.currentTime = Math.min(Math.max(0, ratio * v.duration), v.duration);
-  }, []);
+  const seekToRatio = useCallback(
+    (ratio: number) => {
+      const v = videoRef.current;
+      if (!v || total <= 0) return;
+      v.currentTime = Math.min(Math.max(0, ratio * total), total);
+    },
+    [total],
+  );
 
   function pointerSeek(e: React.PointerEvent) {
     const bar = barRef.current;
@@ -137,6 +193,7 @@ export function VideoPlayer({
   useEffect(() => {
     return () => {
       if (hideTimer.current) clearTimeout(hideTimer.current);
+      if (probe.current.timer) clearTimeout(probe.current.timer);
     };
   }, []);
 
@@ -214,8 +271,9 @@ export function VideoPlayer({
     showUi();
   }
 
-  const pct = duration > 0 ? (current / duration) * 100 : 0;
-  const bufPct = duration > 0 ? (buffered / duration) * 100 : 0;
+  // Clamped: a hinted length can be a touch shorter than the actual file.
+  const pct = total > 0 ? Math.min(100, (current / total) * 100) : 0;
+  const bufPct = total > 0 ? Math.min(100, (buffered / total) * 100) : 0;
 
   return (
     <div
@@ -238,7 +296,9 @@ export function VideoPlayer({
         preload="metadata"
         className="aspect-video w-full bg-black"
         onClick={togglePlay}
-        onPlay={() => {
+        onPlay={(e) => {
+          // The student is watching now — never yank them back mid-playback.
+          endProbe(e.currentTarget);
           setPlaying(true);
           setStarted(true);
           showUi();
@@ -249,14 +309,29 @@ export function VideoPlayer({
         }}
         onWaiting={() => setWaiting(true)}
         onPlaying={() => setWaiting(false)}
-        onDurationChange={(e) => setDuration(e.currentTarget.duration || 0)}
+        onDurationChange={(e) => {
+          const v = e.currentTarget;
+          setDuration(Number.isFinite(v.duration) ? v.duration : 0);
+          if (Number.isFinite(v.duration)) endProbe(v);
+        }}
+        onSeeked={(e) => {
+          // Fallback for browsers that resolve the length without a durationchange.
+          if (Number.isFinite(e.currentTarget.duration)) endProbe(e.currentTarget);
+        }}
         onLoadedMetadata={(e) => {
           const v = e.currentTarget;
-          setDuration(v.duration || 0);
+          setDuration(Number.isFinite(v.duration) ? v.duration : 0);
           setVolume(v.volume);
           setMuted(v.muted);
-          // Resume where the student stopped (never past the very end).
-          if (!resumed.current && initialTime > 1 && initialTime < v.duration - 2) {
+          if (!Number.isFinite(v.duration)) {
+            // No length in the file — recover it before anything else, so the
+            // timecode, the bar and seeking all work (resume happens after).
+            // Only while paused: on a slow connection the student can hit play
+            // before metadata arrives, and probing then would yank playback to
+            // the end of the file. `durationHint` covers that case instead.
+            if (probe.current.state === "idle" && v.paused) startProbe(v);
+          } else if (!resumed.current && initialTime > 1 && initialTime < v.duration - 2) {
+            // Resume where the student stopped (never past the very end).
             v.currentTime = initialTime;
           }
           resumed.current = true;
@@ -264,6 +339,12 @@ export function VideoPlayer({
         }}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
+          // While probing, currentTime sits at the far end of the file: don't
+          // show it and don't let the caller count it as watched.
+          if (probe.current.state === "running") {
+            if (Number.isFinite(v.duration)) endProbe(v);
+            return;
+          }
           setCurrent(v.currentTime);
           if (v.buffered.length > 0) {
             setBuffered(v.buffered.end(v.buffered.length - 1));
@@ -312,9 +393,9 @@ export function VideoPlayer({
           role="slider"
           aria-label="Перемотка"
           aria-valuemin={0}
-          aria-valuemax={Math.round(duration)}
+          aria-valuemax={Math.round(total)}
           aria-valuenow={Math.round(current)}
-          aria-valuetext={`${fmt(current)} из ${fmt(duration)}`}
+          aria-valuetext={`${fmt(current)} из ${fmt(total)}`}
           tabIndex={0}
           onPointerDown={(e) => {
             (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -367,7 +448,7 @@ export function VideoPlayer({
           </div>
 
           <span className="nums ml-1.5 font-mono text-xs text-white/90">
-            {fmt(current)} <span className="text-white/50">/ {fmt(duration)}</span>
+            {fmt(current)} <span className="text-white/50">/ {fmt(total)}</span>
           </span>
 
           <div className="relative ml-auto">

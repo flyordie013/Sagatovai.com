@@ -21,8 +21,22 @@ export const dynamic = "force-dynamic";
 // Large uploads take a while; give the route room where the host honours it.
 export const maxDuration = 300;
 
+/** Nothing plausible for a lesson runs longer than this. */
+const MAX_DURATION_SEC = 12 * 60 * 60;
+
 function bad(message: string, status = 400) {
   return Response.json({ error: message }, { status });
+}
+
+/**
+ * Length the browser measured from the file before uploading. Untrusted input,
+ * so anything that is not a sane whole number of seconds is dropped — the
+ * lesson then keeps whatever the owner had set by hand.
+ */
+function parseDuration(raw: string | null): number | null {
+  const sec = Number(raw);
+  if (!Number.isInteger(sec) || sec <= 0 || sec > MAX_DURATION_SEC) return null;
+  return sec;
 }
 
 export async function POST(
@@ -68,6 +82,8 @@ export async function POST(
     return bad("Не удалось сохранить файл", 500);
   }
 
+  const durationSec = parseDuration(request.headers.get("x-video-duration"));
+
   await db
     .update(lessons)
     .set({
@@ -75,6 +91,8 @@ export async function POST(
       videoSizeBytes: stored.size,
       videoMimeType: stored.mimeType,
       videoUrl: null, // an upload replaces any external link
+      // Left untouched when the browser could not measure the file.
+      ...(durationSec === null ? {} : { videoDurationSec: durationSec }),
     })
     .where(eq(lessons.id, lessonId));
 

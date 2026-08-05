@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ArrowRight, Lock, Bot, FileText } from "lucide-react";
-import { requireUser } from "@/lib/session";
+import { requireUser, isStaff } from "@/lib/session";
 import { getLessonForStudent } from "@/data/course";
 import { LessonPlayer } from "@/components/lesson/lesson-player";
 import { Card } from "@/components/ui/card";
@@ -18,7 +18,7 @@ export default async function LessonPage({
   const lessonId = Number(id);
   if (!Number.isInteger(lessonId)) notFound();
 
-  const { userId } = await requireUser();
+  const { userId, role } = await requireUser();
   const data = await getLessonForStudent(lessonId, userId);
   if (!data) notFound();
 
@@ -84,6 +84,12 @@ export default async function LessonPage({
                 ? 0
                 : Math.floor((watchedPct / 100) * lesson.videoDurationSec)
             }
+            // Fallback length for files that carry none in their header (screen
+            // recordings report Infinity) — without it the watch % never moves.
+            durationHint={lesson.videoDurationSec}
+            // Staff review their own lessons — gating them on watch time just
+            // gets in the way of checking that an upload works.
+            canSkipGate={isStaff(role)}
             courseSlug={course.slug}
           />
 

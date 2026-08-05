@@ -5,11 +5,62 @@ import { useRouter } from "next/navigation";
 import { UploadCloud, CheckCircle2, Trash2, AlertCircle, Loader2 } from "lucide-react";
 
 const ACCEPT = "video/mp4,video/webm,video/quicktime,video/x-matroska";
+/** Give up on the metadata probe rather than stall the upload behind it. */
+const PROBE_TIMEOUT_MS = 20_000;
 
 function fmtSize(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} ГБ`;
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} МБ`;
   return `${Math.max(1, Math.round(bytes / 1024))} КБ`;
+}
+
+/**
+ * Reads the clip's length out of the file itself, so the owner never has to type
+ * it in by hand (the player and the watch-percentage both depend on it).
+ *
+ * Screen recordings (MediaRecorder) carry no duration in their header and the
+ * browser reports `Infinity` for them — seeking past the end forces it to scan
+ * the file and emit a `durationchange` with the real value. Resolves `null` when
+ * the length cannot be measured; the upload goes ahead either way.
+ */
+function readDurationSec(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    let settled = false;
+
+    const finish = (sec: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      v.removeAttribute("src");
+      v.load(); // aborts a still-running scan before the blob URL goes away
+      URL.revokeObjectURL(url);
+      resolve(sec !== null && sec > 0 ? Math.round(sec) : null);
+    };
+
+    const timer = setTimeout(() => finish(null), PROBE_TIMEOUT_MS);
+
+    v.onloadedmetadata = () => {
+      if (Number.isFinite(v.duration)) {
+        finish(v.duration);
+        return;
+      }
+      try {
+        v.currentTime = 1e101; // clamped to the end, which reveals the duration
+      } catch {
+        finish(null); // not seekable — nothing more to try
+      }
+    };
+    v.ondurationchange = () => {
+      if (Number.isFinite(v.duration)) finish(v.duration);
+    };
+    v.onerror = () => finish(null);
+
+    v.preload = "metadata";
+    v.muted = true;
+    v.src = url;
+  });
 }
 
 /**
@@ -32,15 +83,20 @@ export function VideoUpload({
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  function upload(file: File) {
+  async function upload(file: File) {
     setError(null);
     setDone(false);
     setProgress(0);
     setBusy(true);
 
+    // Probe before sending: the request body is the raw file stream, so the
+    // measured length has to travel as a header.
+    const durationSec = await readDurationSec(file);
+
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/admin/lessons/${lessonId}/video`);
     xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+    if (durationSec) xhr.setRequestHeader("X-Video-Duration", String(durationSec));
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
@@ -132,7 +188,7 @@ export function VideoUpload({
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) upload(file);
+          if (file) void upload(file);
         }}
       />
 
