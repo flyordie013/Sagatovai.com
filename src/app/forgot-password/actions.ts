@@ -10,7 +10,7 @@ import { profiles, passwordResets } from "@/db/schema";
 import { hashPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/client-ip";
-import { sendEmail, emailLayout } from "@/lib/email";
+import { sendEmail, emailLayout, escapeHtml } from "@/lib/email";
 import { MIN_PASSWORD } from "@/lib/auth-rules";
 
 export interface ForgotState {
@@ -93,7 +93,7 @@ export async function requestReset(
       text: `Чтобы задать новый пароль, откройте ссылку (действует 1 час):\n${link}\n\nЕсли вы не запрашивали сброс — просто проигнорируйте письмо.`,
       html: emailLayout(
         "Восстановление пароля",
-        `<p>Здравствуйте${user.name ? `, ${user.name.split(" ")[0]}` : ""}!</p>
+        `<p>Здравствуйте${user.name ? `, ${escapeHtml(user.name.split(" ")[0])}` : ""}!</p>
          <p>Вы запросили сброс пароля. Ссылка действует 1 час:</p>
          <p style="margin:20px 0"><a href="${link}" style="display:inline-block;background:#f5a524;color:#1a1206;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:12px">Задать новый пароль</a></p>
          <p style="color:#6b6b76;font-size:13px">Если вы не запрашивали сброс — просто проигнорируйте это письмо.</p>`,

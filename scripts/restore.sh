@@ -10,6 +10,10 @@
 # Before touching the database it dumps the current one, so even a restore from
 # the wrong file can be undone.
 set -euo pipefail
+# The safety dump written below holds every student's email and password hash —
+# same reason backup.sh does this: 0600 files, 0700 directories, readable only
+# by the account running the restore.
+umask 077
 
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:$PATH}"
 

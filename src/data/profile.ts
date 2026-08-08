@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   profiles,
@@ -15,6 +15,7 @@ import { requireUser } from "@/lib/session";
 import { levelProgress, type LevelProgress } from "@/lib/leveling";
 import { effectiveStreak } from "@/lib/streak";
 import { courseVisibleToStudent } from "./course";
+import { achievementUnlocked, countUnlockedAchievements } from "./achievements";
 
 export interface ProfileCourse {
   title: string;
@@ -115,13 +116,8 @@ export async function getProfile(): Promise<ProfileData> {
     .from(lessonProgress)
     .where(and(eq(lessonProgress.userId, uid), eq(lessonProgress.completed, true)));
 
-  // Unlocked achievements count.
-  const [achAgg] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(userAchievements)
-    .where(
-      and(eq(userAchievements.userId, uid), isNotNull(userAchievements.unlockedAt)),
-    );
+  // Unlocked achievements count — same rule as the dashboard and /achievements.
+  const achievementsUnlocked = await countUnlockedAchievements(uid);
 
   // Achievement catalog with unlock state for this user.
   const achRows = await db
@@ -137,8 +133,9 @@ export async function getProfile(): Promise<ProfileData> {
         eq(userAchievements.userId, uid),
       ),
     )
+    // Earned ones first — same rule as everywhere else, not a hand-written copy.
     .orderBy(
-      sql`(${userAchievements.unlockedAt} is not null) desc`,
+      desc(achievementUnlocked()),
       desc(userAchievements.unlockedAt),
       achievements.title,
     )
@@ -164,7 +161,7 @@ export async function getProfile(): Promise<ProfileData> {
     stats: {
       courses: enrolled.length,
       lessonsCompleted: lessonsAgg?.n ?? 0,
-      achievements: achAgg?.n ?? 0,
+      achievements: achievementsUnlocked,
     },
     courses: courseList,
     topAchievements,

@@ -1,13 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
 import { LEGAL_UPDATED, REFUND, SELLER } from "@/lib/legal";
 import { pluralize } from "@/lib/utils";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Условия возврата",
   description:
     "В какой срок и на каких условиях можно вернуть оплату за доступ к онлайн-курсу OQU и как подать заявление.",
+  alternates: { canonical: "/refund" },
 };
 
 export default function RefundPage() {

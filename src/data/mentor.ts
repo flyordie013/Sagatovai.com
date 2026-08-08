@@ -74,6 +74,33 @@ export async function getMentorData(
 }
 
 /**
+ * Prompt budget for the lesson material. The mentor's whole point is discussing
+ * the actual topic, not the title — but the material is sent on EVERY message,
+ * so it stays capped: enough to reason about one lesson, small enough to keep
+ * each call cheap and fast on a mobile connection.
+ */
+const LESSON_CONTENT_LIMIT = 1500;
+/** How much of the short lesson description is kept (it only frames the topic). */
+const LESSON_DESC_LIMIT = 200;
+
+/**
+ * Compacts the owner-typed lesson material into a prompt-sized excerpt: blank
+ * lines and indentation carry no meaning for the model, and the tail is cut on
+ * a word boundary so the mentor never sees half a term.
+ */
+function lessonExcerpt(content: string): string {
+  const text = content
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (text.length <= LESSON_CONTENT_LIMIT) return text;
+  const cut = text.slice(0, LESSON_CONTENT_LIMIT);
+  const boundary = Math.max(cut.lastIndexOf("\n"), cut.lastIndexOf(" "));
+  return `${(boundary > LESSON_CONTENT_LIMIT / 2 ? cut.slice(0, boundary) : cut).trimEnd()}…`;
+}
+
+/**
  * Builds the student's current learning snapshot for the AI mentor prompt.
  * Every query is scoped by `userId` (the caller passes the session user), so it
  * can only ever read the caller's own progress/enrollments. The public course
@@ -135,6 +162,7 @@ export async function getMentorLearningContext(
       completed: lessonProgress.completed,
       lessonTitle: lessons.title,
       lessonDesc: lessons.description,
+      lessonContent: lessons.content,
       moduleTitle: modules.title,
       courseId: modules.courseId,
     })
@@ -190,10 +218,20 @@ export async function getMentorLearningContext(
 
   if (active) {
     const pos = ordered.findIndex((l) => l.id === active.lessonId);
+    // The lesson MATERIAL, not just its title — otherwise the mentor answers in
+    // generalities about a topic it can't actually see. Both parts go into the
+    // one free-form field the prompt renders (`description`); when there is no
+    // short description, the material stands on its own.
+    const desc = (active.lessonDesc ?? "").slice(0, LESSON_DESC_LIMIT).trim();
+    const material = lessonExcerpt(active.lessonContent ?? "");
+    const about =
+      desc && material
+        ? `${desc}\n\nМатериалы урока (фрагмент):\n${material}`
+        : desc || material;
     ctx.currentLesson = {
       moduleTitle: active.moduleTitle,
       title: active.lessonTitle,
-      description: (active.lessonDesc ?? "").slice(0, 200),
+      description: about,
       position: pos >= 0 ? pos + 1 : 1,
       total,
       completed: active.completed,

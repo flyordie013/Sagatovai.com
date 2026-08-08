@@ -1,13 +1,16 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Bot, Trophy, PlayCircle, Sparkles, MessageCircle } from "lucide-react";
 import { listPublicCourses } from "@/data/public";
 import { PublicCourseCard, CoursesEmptyState } from "./public-course-card";
 import { LeadForm } from "./lead-form";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "OQU — обучение AI с персональным наставником",
   description:
     "Практические курсы по искусственному интеллекту на русском языке: нейросети для контента, AI-менеджер продаж, vibe-coding. С персональным AI-наставником и реальными проектами.",
+  // Relative — resolved against metadataBase from app/layout.tsx.
+  alternates: { canonical: "/" },
 };
 
 const STEPS = [

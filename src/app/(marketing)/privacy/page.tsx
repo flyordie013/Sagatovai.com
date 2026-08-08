@@ -1,9 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Политика конфиденциальности",
   description: "Как OQU обрабатывает и защищает персональные данные пользователей.",
+  alternates: { canonical: "/privacy" },
 };
 
 const UPDATED = "29 июля 2026 г.";

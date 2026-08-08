@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
@@ -5,9 +6,12 @@ import { BrandMark } from "@/components/layout/brand";
 import { RegisterForm } from "./register-form";
 
 export const dynamic = "force-dynamic";
-export const metadata = {
+// Selling happens on the storefront; the sign-up form itself is a dead end in
+// search results and would compete with /courses for the same queries.
+export const metadata: Metadata = {
   title: "Регистрация",
   description: "Создайте аккаунт и начните учиться с AI-наставником.",
+  robots: { index: false },
 };
 
 export default async function RegisterPage() {

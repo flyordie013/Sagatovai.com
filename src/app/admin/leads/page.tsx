@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { MessageSquare, Phone, BookOpen } from "lucide-react";
-import { listLeads } from "@/data/admin";
-import { setLeadStatus } from "../actions";
+import { listLeads, LEADS_LIMIT } from "@/data/admin";
+import { setLeadStatus, deleteLead } from "../actions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmSubmit } from "@/components/admin/form";
 import { formatDateTime } from "@/components/admin/format";
-import { pluralize } from "@/lib/utils";
+import { formatNumber, pluralize } from "@/lib/utils";
 
 const NEXT_STATUSES = [
   { value: "contacted", label: "Связались" },
@@ -24,8 +25,7 @@ const STATUS: Record<string, { label: string; variant: "gold" | "teal" | "neutra
 };
 
 export default async function AdminLeadsPage() {
-  const rows = await listLeads();
-  const fresh = rows.filter((r) => r.status === "new").length;
+  const { rows, total, fresh } = await listLeads();
 
   return (
     <div className="mx-auto max-w-[900px] space-y-6">
@@ -46,6 +46,13 @@ export default async function AdminLeadsPage() {
           </Link>
           .
         </p>
+        {total > rows.length && (
+          <p className="mt-2 text-sm text-muted">
+            Показаны последние {formatNumber(LEADS_LIMIT)} обращений из{" "}
+            {formatNumber(total)}. Разберите их — и увидите следующие: ненужные
+            можно удалить кнопкой «Удалить».
+          </p>
+        )}
       </header>
 
       {rows.length === 0 ? (
@@ -91,6 +98,19 @@ export default async function AdminLeadsPage() {
                           </button>
                         </form>
                       ))}
+                      {/* Spam and duplicates: without this they stay in the
+                          inbox forever. Irreversible → confirm first. */}
+                      <form action={deleteLead}>
+                        <input type="hidden" name="leadId" value={l.id} />
+                        <ConfirmSubmit
+                          triggerClassName="rounded-lg border border-line px-2.5 py-1 text-xs text-muted transition-colors hover:border-danger/40 hover:text-danger"
+                          confirmLabel="Удалить"
+                          prompt="Удалить лид навсегда?"
+                          aria-label={`Удалить лид ${l.name}`}
+                        >
+                          Удалить
+                        </ConfirmSubmit>
+                      </form>
                     </div>
                   </div>
                 </div>

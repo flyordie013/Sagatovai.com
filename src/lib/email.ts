@@ -64,6 +64,20 @@ export async function sendEmail(msg: EmailMessage): Promise<{ ok: boolean }> {
   }
 }
 
+/**
+ * Escapes text that a user typed before it goes into the HTML part of an email.
+ * Lives next to `emailLayout` on purpose: every caller that builds mail markup
+ * already imports from this module, so the next email added to the project
+ * reaches for the same helper instead of growing a fourth private copy.
+ */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 /** Minimal branded wrapper so transactional mail looks intentional. */
 export function emailLayout(title: string, bodyHtml: string): string {
   return `<!doctype html><html><body style="margin:0;background:#0f1014;padding:32px 0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#f4f2ec">

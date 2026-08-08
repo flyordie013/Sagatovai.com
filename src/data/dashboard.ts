@@ -9,10 +9,10 @@ import {
   lessonProgress,
   missions,
   userMissions,
-  userAchievements,
 } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { courseVisibleToStudent } from "./course";
+import { countUnlockedAchievements } from "./achievements";
 import { getCurrentUser } from "./user";
 import type { CourseIcon, CourseSummary, DashboardData, Mission } from "@/types";
 
@@ -128,10 +128,7 @@ export async function getDashboard(): Promise<DashboardData> {
 
   const mission: Mission | null = um ?? null;
 
-  const [achAgg] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(userAchievements)
-    .where(eq(userAchievements.userId, uid));
+  const achievementsUnlocked = await countUnlockedAchievements(uid);
 
   return {
     user,
@@ -139,6 +136,6 @@ export async function getDashboard(): Promise<DashboardData> {
     mission,
     totalLessons,
     completedLessons,
-    achievementsUnlocked: achAgg?.n ?? 0,
+    achievementsUnlocked,
   };
 }

@@ -103,6 +103,30 @@ export function LeadForm({
         </a>
         .
       </p>
+
+      {/* Honeypot. Off-screen rather than `hidden`, because a bot that fills
+          every field it finds is exactly what this catches; a filled value makes
+          the server drop the lead silently (see actions.ts). Out of the tab
+          order, and last in the form so the `space-y-3` rhythm of the visible
+          fields is untouched.
+
+          The name matters: anything Chrome/Safari recognise as an address field
+          (company, organization, address…) gets filled by autofill on a form
+          this shape, and `autoComplete="off"` is ignored for those. A real
+          visitor's lead would then be dropped as spam — silently, on the only
+          sales channel there is. Hence a name no autofill heuristic knows.
+          No `aria-hidden` either: it must not wrap a focusable input. */}
+      <div className="absolute left-[-9999px] size-px overflow-hidden">
+        <label htmlFor="lead-ref2">Не заполняйте это поле</label>
+        <input
+          id="lead-ref2"
+          name="lead_ref2"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          defaultValue=""
+        />
+      </div>
     </form>
   );
 }

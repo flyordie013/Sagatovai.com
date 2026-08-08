@@ -1,10 +1,12 @@
+import type { Metadata } from "next";
 import { listPublicCourses } from "@/data/public";
 import { PublicCourseCard, CoursesEmptyState } from "../public-course-card";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Курсы",
   description:
     "Практические курсы по искусственному интеллекту на русском языке — от нейросетей для контента до автоматизации продаж и разработки с AI.",
+  alternates: { canonical: "/courses" },
 };
 
 export default async function PublicCoursesPage() {

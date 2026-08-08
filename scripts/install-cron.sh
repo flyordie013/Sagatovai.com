@@ -13,6 +13,10 @@ set -euo pipefail
 
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:$PATH}"
 
+# Everything under the backup folder (dumps with student emails and password
+# hashes, video archives, logs) must stay readable by its owner only.
+umask 077
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${PROJECT_DIR}/.env"
@@ -61,6 +65,16 @@ fi
 
 mkdir -p "$BACKUP_DIR" 2>/dev/null ||
   fail "Не удалось создать папку ${BACKUP_DIR}. Запустите от root (sudo) или задайте OQU_BACKUP_DIR."
+chmod 700 "$BACKUP_DIR" 2>/dev/null || true
+
+# The two log files are created by cron's own shell (the `>>` in the two lines
+# above), which uses cron's umask, not ours — so create them here, with the
+# right permissions, before cron ever gets to touch them. `>>` never truncates,
+# so re-running this script keeps the existing journals intact.
+for log in backup.log healthcheck.log; do
+  : >>"${BACKUP_DIR}/${log}" 2>/dev/null || true
+  chmod 600 "${BACKUP_DIR}/${log}" 2>/dev/null || true
+done
 
 {
   # Keep the rest of the crontab byte-for-byte; only our two lines are added.

@@ -19,10 +19,10 @@ import { PAYMENT, isPaymentConfigured, receiptWhatsAppUrl } from "@/lib/payment"
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { profiles } from "@/db/schema";
-import { getCourseForStudent } from "@/data/course";
+import { getCourseForStudent, getNextCourseSuggestion } from "@/data/course";
 import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
-import { cn, pluralize } from "@/lib/utils";
+import { cn, formatNumber, pluralize } from "@/lib/utils";
 import { RequestButton, type PaymentPanel } from "../request-button";
 
 export const metadata = { title: "Курс" };
@@ -75,6 +75,12 @@ export default async function CoursePage({
   // Request already saved AND we can tell the student what to do with it.
   const awaitingPayment = requested && payment !== null;
 
+  // Finishing a course used to end on a link to /achievements and nothing else.
+  // Only queried in that state, so it costs nothing on every other visit.
+  const nextCourse = courseCompleted
+    ? await getNextCourseSuggestion(userId, course.id)
+    : null;
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <Link
@@ -116,19 +122,54 @@ export default async function CoursePage({
                 <ArrowRight className="size-4" />
               </Link>
             ) : courseCompleted ? (
-              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-teal/30 bg-teal/10 px-4 py-3">
-                <Trophy className="size-5 shrink-0 text-teal" />
-                <div className="min-w-0">
-                  <p className="font-display font-bold text-text">Курс пройден — поздравляем!</p>
-                  <p className="text-sm text-muted">Все уроки завершены. Так держать 💪</p>
+              <div className="mt-4 space-y-3">
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-teal/30 bg-teal/10 px-4 py-3">
+                  <Trophy className="size-5 shrink-0 text-teal" />
+                  <div className="min-w-0">
+                    <p className="font-display font-bold text-text">Курс пройден — поздравляем!</p>
+                    <p className="text-sm text-muted">Все уроки завершены. Так держать 💪</p>
+                  </div>
+                  <Link
+                    href="/achievements"
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-line-strong bg-raised px-3 py-2 text-sm font-semibold text-text transition-colors hover:bg-raised-2"
+                  >
+                    Достижения
+                    <ArrowRight className="size-4" />
+                  </Link>
                 </div>
-                <Link
-                  href="/achievements"
-                  className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-line-strong bg-raised px-3 py-2 text-sm font-semibold text-text transition-colors hover:bg-raised-2"
-                >
-                  Достижения
-                  <ArrowRight className="size-4" />
-                </Link>
+
+                {/* Somewhere to go next — otherwise finishing a course is a dead end. */}
+                {nextCourse && (
+                  <div className="rounded-xl border border-gold/25 bg-gold/5 p-4">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-gold">
+                      Что дальше
+                    </p>
+                    <p className="mt-1.5 font-display text-lg font-bold leading-snug">
+                      {nextCourse.title}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-sm text-muted">
+                      {nextCourse.description}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <Link
+                        href={`/course/${nextCourse.slug}`}
+                        className="inline-flex items-center gap-2 rounded-xl bg-gold px-4 py-2.5 text-sm font-semibold text-gold-ink shadow-glow transition-colors hover:bg-gold-soft"
+                      >
+                        Посмотреть курс
+                        <ArrowRight className="size-4" />
+                      </Link>
+                      <span className="nums font-mono text-sm font-bold text-gold">
+                        {formatNumber(nextCourse.price)} ₸
+                      </span>
+                      {nextCourse.weeks > 0 && (
+                        <span className="font-mono text-xs text-muted">
+                          {nextCourse.weeks}{" "}
+                          {pluralize(nextCourse.weeks, ["неделя", "недели", "недель"])}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>

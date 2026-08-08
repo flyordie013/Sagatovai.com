@@ -1,11 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Mail, MessageCircle } from "lucide-react";
 import { SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
 import { SELLER, isLegalConfigured, isRefundConfigured } from "@/lib/legal";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Контакты",
   description: "Как связаться с OQU: WhatsApp, email и сведения о продавце.",
+  alternates: { canonical: "/contacts" },
 };
 
 export default function ContactsPage() {

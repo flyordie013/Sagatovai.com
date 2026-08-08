@@ -139,6 +139,8 @@ export interface PurchaseRequest {
   courseTitle: string;
   coursePrice: number;
   amount: number;
+  /** Free-form line saved with the request — may carry the contact the student left. */
+  note: string;
   createdAt: Date;
 }
 
@@ -155,6 +157,7 @@ export async function getPurchaseRequests(): Promise<PurchaseRequest[]> {
       courseTitle: courses.title,
       coursePrice: courses.price,
       amount: payments.amount,
+      note: payments.note,
       createdAt: payments.createdAt,
     })
     .from(payments)
@@ -174,24 +177,60 @@ export interface LeadRow {
   createdAt: Date;
 }
 
+export interface LeadsList {
+  /** Newest first, at most {@link LEADS_LIMIT} of them. */
+  rows: LeadRow[];
+  /** Leads stored in total — may be larger than `rows.length`. */
+  total: number;
+  /** Untouched («new») leads across the whole table, not just the shown page. */
+  fresh: number;
+}
+
+/**
+ * The form is public and unauthenticated, so a spam wave can add thousands of
+ * rows overnight. The page renders one card per lead, on a phone, over mobile
+ * internet — an unbounded query would make /admin/leads impossible to open
+ * exactly when the owner needs to clean it up.
+ */
+export const LEADS_LIMIT = 200;
+
 /** Leads captured from the public storefront (visitors without an account). */
-export async function listLeads(): Promise<LeadRow[]> {
+export async function listLeads(): Promise<LeadsList> {
   await requireStaff();
   const db = await getDb();
-  const rows = await db
-    .select({
-      id: leads.id,
-      name: leads.name,
-      contact: leads.contact,
-      comment: leads.comment,
-      status: leads.status,
-      courseTitle: courses.title,
-      createdAt: leads.createdAt,
-    })
-    .from(leads)
-    .leftJoin(courses, eq(leads.courseId, courses.id))
-    .orderBy(desc(leads.createdAt));
-  return rows as LeadRow[];
+
+  const [rows, [totals]] = await Promise.all([
+    db
+      .select({
+        id: leads.id,
+        name: leads.name,
+        contact: leads.contact,
+        comment: leads.comment,
+        status: leads.status,
+        courseTitle: courses.title,
+        createdAt: leads.createdAt,
+      })
+      .from(leads)
+      .leftJoin(courses, eq(leads.courseId, courses.id))
+      // `id` tiebreaker → a stable order when a spam script inserts many rows
+      // within the same second.
+      .orderBy(desc(leads.createdAt), desc(leads.id))
+      .limit(LEADS_LIMIT),
+    // Counted over the whole table: the header must not report "3 новых" just
+    // because the rest of them fell outside the limit.
+    db
+      .select({
+        total: countInt,
+        fresh: sql<number>`count(*) filter (where ${leads.status} = 'new')::int`,
+      })
+      .from(leads),
+  ]);
+
+  return {
+    rows: rows as LeadRow[],
+    total: totals?.total ?? 0,
+    fresh: totals?.fresh ?? 0,
+  };
 }
 
 /** Everything the gamification admin screen needs, in one call. */

@@ -8,7 +8,7 @@ import { getDb } from "@/db";
 import { courses, leads } from "@/db/schema";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/client-ip";
-import { sendEmail, emailLayout } from "@/lib/email";
+import { sendEmail, emailLayout, escapeHtml as esc } from "@/lib/email";
 import { OWNER_NOTIFY_EMAIL } from "@/lib/contacts";
 
 export interface LeadState {
@@ -22,14 +22,6 @@ const MAX = { name: 120, contact: 120, comment: 1000 };
 // metadataBase/robots), never from the request Host header.
 const ADMIN_LEADS_URL = `${(process.env.APP_URL || "https://sagatovai.com").replace(/\/$/, "")}/admin/leads`;
 
-/** Every field below is visitor-controlled — never interpolate it raw into HTML. */
-function esc(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 /**
  * Captures a lead from the PUBLIC storefront (visitor has no account yet).
@@ -40,6 +32,16 @@ export async function submitLead(
   _prev: LeadState,
   formData: FormData,
 ): Promise<LeadState> {
+  // Honeypot (see lead-form.tsx): the field is off-screen, so only a bot that
+  // fills every input reaches this. Report success and drop it silently —
+  // an error message would just teach the bot which field to skip.
+  if ((formData.get("lead_ref2") ?? "").toString().trim()) {
+    // Logged, because the failure mode of a honeypot is invisible: if browser
+    // autofill ever starts touching this field, leads vanish without a trace.
+    console.warn("[lead] honeypot triggered — submission dropped");
+    return { ok: true };
+  }
+
   const name = (formData.get("name") ?? "").toString().trim();
   const contact = (formData.get("contact") ?? "").toString().trim();
   const comment = (formData.get("comment") ?? "").toString().trim();
@@ -57,7 +59,19 @@ export async function submitLead(
 
   const h = await headers();
   const ip = clientIp(h.get("x-forwarded-for"));
-  if (!rateLimit(`lead:${ip}`, { max: 5, windowMs: 10 * 60_000 }).ok) {
+  // Two buckets, because KZ mobile carriers put dozens of real visitors behind
+  // one CGNAT address: the tight limit is per contact (nobody sends the same
+  // form twice in ten minutes), and the address as a whole gets a much looser
+  // cap that only a flood can reach. The error keeps the direct WhatsApp route
+  // open either way.
+  if (
+    !rateLimit(`lead:${ip}:${contact}`, {
+      max: 2,
+      windowMs: 10 * 60_000,
+      ip,
+      ipMax: 12,
+    }).ok
+  ) {
     return { error: "Слишком много заявок. Попробуйте позже или напишите нам напрямую." };
   }
 

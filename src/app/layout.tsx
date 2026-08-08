@@ -44,11 +44,14 @@ export const metadata: Metadata = {
   applicationName: "OQU",
   // Link previews in WhatsApp/Telegram. The image itself comes from
   // app/opengraph-image.tsx — Next.js appends it to both card types.
+  // Deliberately no `url`: metadata is merged shallowly per key, so every page
+  // that does not declare its own openGraph would inherit og:url of the home
+  // page and preview a forwarded link as the landing page. Pages that need an
+  // og:url set it themselves (see (marketing)/courses/[slug]/page.tsx).
   openGraph: {
     type: "website",
     siteName: "OQU",
     locale: "ru_RU",
-    url: "/",
     title: TITLE,
     description: DESCRIPTION,
   },

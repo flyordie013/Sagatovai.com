@@ -1,13 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
 import { ACCESS_MONTHS, LEGAL_UPDATED, SELLER, isRefundConfigured } from "@/lib/legal";
 import { pluralize } from "@/lib/utils";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Публичная оферта",
   description:
     "Условия, на которых OQU продаёт доступ к онлайн-курсам: оформление покупки, передача доступа, срок, права и обязанности сторон.",
+  alternates: { canonical: "/offer" },
 };
 
 export default function OfferPage() {

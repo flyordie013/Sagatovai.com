@@ -27,7 +27,7 @@ import { hashPassword } from "@/lib/password";
 import { provisionNewStudent } from "@/lib/provision";
 import { deleteVideo } from "@/lib/storage";
 import { levelForXp, rankForLevel } from "@/lib/leveling";
-import { sendEmail, emailLayout } from "@/lib/email";
+import { sendEmail, emailLayout, escapeHtml } from "@/lib/email";
 import { MIN_PASSWORD } from "@/lib/auth-rules";
 
 /** Removes uploaded video files for a set of storage keys (best-effort). */
@@ -50,14 +50,6 @@ function int(fd: FormData, key: string, fallback = 0): number {
 function bool(fd: FormData, key: string): boolean {
   const v = fd.get(key);
   return v != null && v !== "false" && v !== "0";
-}
-/** User-supplied text is interpolated into email HTML — escape it first. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 /**
  * Course rating, 0–5 with one decimal. An empty field means "no rating yet" → 0,
@@ -492,6 +484,22 @@ export async function setLeadStatus(formData: FormData): Promise<void> {
   if (!id || !LEAD_STATUSES.includes(next)) return;
 
   await db.update(leads).set({ status: next }).where(eq(leads.id, id));
+  revalidatePath("/admin/leads");
+  revalidatePath("/admin");
+}
+
+/**
+ * Removes a lead for good. The form is public, so spam lands in the same inbox
+ * as real customers — without this the only way to clear it is a SQL client.
+ * Irreversible: the UI asks for confirmation first (ConfirmSubmit).
+ */
+export async function deleteLead(formData: FormData): Promise<void> {
+  await requireStaff();
+  const db = await getDb();
+  const id = int(formData, "leadId");
+  if (!id) return;
+
+  await db.delete(leads).where(eq(leads.id, id));
   revalidatePath("/admin/leads");
   revalidatePath("/admin");
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MessageCircle, Check, Copy, ExternalLink } from "lucide-react";
 import type { PaymentDetails } from "@/lib/payment";
@@ -147,13 +147,20 @@ export function RequestButton({
   payment: PaymentPanel | null;
 }) {
   const router = useRouter();
+  const contactId = useId();
   const [pending, start] = useTransition();
   // `alreadyRequested` reflects the open request in the DB, so returning to the
   // course page later lands straight on the payment screen, not on the button.
   const [done, setDone] = useState(alreadyRequested);
   const [error, setError] = useState<string | null>(null);
+  const [contact, setContact] = useState("");
 
   const showPanel = done && payment !== null;
+  // Soft check only. A KZ mobile is 11 digits (7XXXXXXXXXX), so anything shorter
+  // is probably a typo — but a nickname or a foreign number has every right to
+  // be here, so we never block on it.
+  const contactDigits = contact.replace(/\D/g, "").length;
+  const looksShort = contactDigits > 0 && contactDigits < 10;
 
   // The copy AROUND this button is server-rendered from the same request, so it
   // needs a refresh to catch up. Deliberately outside the transition above: the
@@ -175,23 +182,50 @@ export function RequestButton({
           </p>
         )
       ) : (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() =>
-            start(async () => {
-              setError(null);
-              // Idempotent server-side: a repeat click reports the existing
-              // request back instead of inserting a second row.
-              const r = await createPurchaseRequest(courseId);
-              if (r.ok) setDone(true);
-              else setError(r.error ?? "Не удалось отправить заявку");
-            })
-          }
-          className="inline-flex items-center gap-2 rounded-xl bg-gold px-4 py-2.5 text-sm font-semibold text-gold-ink shadow-glow transition-colors hover:bg-gold-soft disabled:opacity-60"
-        >
-          {pending ? "Отправка…" : "Оставить заявку"}
-        </button>
+        <>
+          {/* Optional on purpose: asking for a number must never cost a lead.
+              Without it the owner is left with email only, which in KZ is the
+              channel students answer last. */}
+          <div className="w-full max-w-sm text-left">
+            <label htmlFor={contactId} className="mb-1.5 block text-xs font-medium text-muted">
+              Ваш WhatsApp для связи <span className="text-faint">— необязательно</span>
+            </label>
+            <input
+              id={contactId}
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              maxLength={64}
+              value={contact}
+              onChange={(e) => setContact(e.target.value)}
+              placeholder="+7 700 000 00 00"
+              className="w-full rounded-xl border border-line-strong bg-raised px-3.5 py-2.5 text-sm text-text placeholder:text-faint outline-none transition-colors focus:border-gold/50 focus:bg-raised-2 focus-visible:ring-2 focus-visible:ring-gold/40"
+            />
+            {/* A hint, not a gate — the request goes through either way. */}
+            <p className={cn("mt-1.5 text-xs", looksShort ? "text-gold" : "text-faint")}>
+              {looksShort
+                ? "Похоже, номер неполный — проверьте. Отправить всё равно можно."
+                : "Так мы быстрее свяжемся с вами и откроем доступ."}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                setError(null);
+                // Idempotent server-side: a repeat click reports the existing
+                // request back instead of inserting a second row.
+                const r = await createPurchaseRequest(courseId, contact);
+                if (r.ok) setDone(true);
+                else setError(r.error ?? "Не удалось отправить заявку");
+              })
+            }
+            className="inline-flex items-center gap-2 rounded-xl bg-gold px-4 py-2.5 text-sm font-semibold text-gold-ink shadow-glow transition-colors hover:bg-gold-soft disabled:opacity-60"
+          >
+            {pending ? "Отправка…" : "Оставить заявку"}
+          </button>
+        </>
       )}
       {error && <p className="text-xs text-danger">{error}</p>}
       {/* The panel already leads to the same WhatsApp chat — don't offer it twice. */}

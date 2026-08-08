@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, inArray, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, ne, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   courses,
@@ -196,6 +196,59 @@ export async function getCourseForStudent(slug: string, userId: string) {
     nextLessonId: nextLesson?.id ?? null,
     modules: mods.map((m) => ({ id: m.id, title: m.title, lessons: byModule.get(m.id) ?? [] })),
   };
+}
+
+export interface CourseSuggestion {
+  slug: string;
+  title: string;
+  description: string;
+  price: number;
+  weeks: number;
+}
+
+/**
+ * The next course to offer a student who just finished one — the moment they
+ * are most likely to buy again, instead of the current dead end.
+ *
+ * Only PUBLISHED, non-archived, PAID courses the student holds no enrollment
+ * for. A free published course is already open to them (see `accessFor`), so
+ * pitching it would be pointless; an enrollment of any kind means the owner has
+ * already decided about that course. Ordering follows the owner's own catalog
+ * order, flagship first.
+ */
+export async function getNextCourseSuggestion(
+  userId: string,
+  excludeCourseId: number,
+): Promise<CourseSuggestion | null> {
+  const db = await getDb();
+  const [next] = await db
+    .select({
+      slug: courses.slug,
+      title: courses.title,
+      description: courses.description,
+      price: courses.price,
+      weeks: courses.weeks,
+    })
+    .from(courses)
+    // LEFT JOIN scoped to this student: a missing row leaves `id` NULL, which is
+    // exactly "not enrolled".
+    .leftJoin(
+      enrollments,
+      and(eq(enrollments.courseId, courses.id), eq(enrollments.userId, userId)),
+    )
+    .where(
+      and(
+        eq(courses.isPublished, true),
+        eq(courses.isArchived, false),
+        ne(courses.id, excludeCourseId),
+        gt(courses.price, 0),
+        isNull(enrollments.id),
+      ),
+    )
+    .orderBy(desc(courses.flagship), asc(courses.orderIndex))
+    .limit(1);
+
+  return next ?? null;
 }
 
 export async function getLessonForStudent(lessonId: number, userId: string) {

@@ -13,6 +13,12 @@ set -euo pipefail
 # cron runs with an almost empty PATH; docker lives in /usr/bin or /usr/local/bin.
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:$PATH}"
 
+# The dump contains every student's email and password hash, and the video
+# archive is the whole paid content of the platform. Default permissions would
+# make both readable by ANY account on the server, so everything this script
+# creates — folders, dumps, archives, the lock file — is owner-only (700/600).
+umask 077
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${PROJECT_DIR}/.env"
@@ -91,6 +97,15 @@ MIN_DUMP_BYTES=1024
 
 mkdir -p "$DAILY_DIR" "$WEEKLY_DIR" 2>/dev/null ||
   fail "Не удалось создать папку ${BACKUP_DIR}. Запустите от root или задайте OQU_BACKUP_DIR."
+
+# Copies made before the rule above existed (and the logs cron appends to, which
+# it creates with its OWN umask) stay world-readable until fixed in place. Only
+# the files this script owns are touched, and only inside the backup folder.
+chmod 700 "$BACKUP_DIR" "$DAILY_DIR" "$WEEKLY_DIR" 2>/dev/null || true
+find "$BACKUP_DIR" -maxdepth 2 -type f \
+  \( -name 'db-*.sql.gz' -o -name 'videos-*.tar' -o -name 'pre-restore-*.sql.gz' \
+  -o -name 'backup.log' -o -name 'healthcheck.log' \) \
+  -exec chmod 600 {} + 2>/dev/null || true
 
 human() { # bytes → "1.2 GB"
   awk -v b="${1:-0}" 'BEGIN {

@@ -6,7 +6,8 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { courses, enrollments, payments, profiles } from "@/db/schema";
 import { requireUser } from "@/lib/session";
-import { sendEmail, emailLayout } from "@/lib/email";
+import { rateLimit } from "@/lib/rate-limit";
+import { sendEmail, emailLayout, escapeHtml as esc } from "@/lib/email";
 import { OWNER_NOTIFY_EMAIL } from "@/lib/contacts";
 import { isPaymentConfigured } from "@/lib/payment";
 import { formatNumber } from "@/lib/utils";
@@ -17,23 +18,37 @@ export interface RequestResult {
   already?: boolean;
 }
 
+/** Max length kept for the contact the student types in (WhatsApp / phone). */
+const MAX_CONTACT = 64;
+
 // Absolute link for the notification. Built from APP_URL (same source as
 // metadataBase/robots), never from the request Host header.
 const ADMIN_REQUESTS_URL = `${(process.env.APP_URL || "https://sagatovai.com").replace(/\/$/, "")}/admin/requests`;
 
-/** Student-controlled values end up in this HTML — never interpolate them raw. */
-function esc(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+
+/**
+ * Normalizes the contact the student typed: one line, no runs of spaces, capped.
+ * Deliberately NOT format-validated — a number in an unexpected shape is still
+ * a way to reach the student, and a rejected request is a lost sale.
+ */
+function cleanContact(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim().slice(0, MAX_CONTACT);
 }
 
-/** Student leaves a purchase request (lead) for a locked/paid course. */
-export async function createPurchaseRequest(courseId: number): Promise<RequestResult> {
+/**
+ * Student leaves a purchase request (lead) for a locked/paid course.
+ *
+ * @param contact - optional WhatsApp/phone the student typed. Profiles carry no
+ *   phone, so without this the owner can only reach them by email — which is
+ *   the weaker channel here and stays silent until mail is configured.
+ */
+export async function createPurchaseRequest(
+  courseId: number,
+  contact = "",
+): Promise<RequestResult> {
   const { userId } = await requireUser();
   const db = await getDb();
+  const waContact = cleanContact(contact);
 
   const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
   if (!course) return { ok: false, error: "Курс не найден" };
@@ -64,11 +79,25 @@ export async function createPurchaseRequest(courseId: number): Promise<RequestRe
     .limit(1);
   if (existing) return { ok: true, already: true };
 
+  // Only real inserts are metered — the idempotent paths above must keep
+  // answering, or a student returning to the page would see an error instead of
+  // their own open request. Keyed by the session userId (server-side, can't be
+  // forged), so a declined request can't be re-sent in a loop and a scripted
+  // click can't email the owner once per course.
+  if (!rateLimit(`course-request:${userId}`, { max: 5, windowMs: 60 * 60_000 }).ok) {
+    return {
+      ok: false,
+      error: "Слишком много заявок. Попробуйте позже или напишите нам в WhatsApp.",
+    };
+  }
+
   // Tells the owner which ending the student actually saw, so they know whether
-  // to expect a receipt or to make the first move themselves.
-  const note = isPaymentConfigured
+  // to expect a receipt or to make the first move themselves. The contact rides
+  // along in the same column — `note` is the only free-form field on payments.
+  const context = isPaymentConfigured
     ? "Заявка из каталога. Студенту показаны сумма и реквизиты — ожидаем чек."
     : "Заявка из каталога";
+  const note = waContact ? `${context} · WhatsApp: ${waContact}` : context;
   await db.insert(payments).values({
     userId,
     courseId,
@@ -91,10 +120,11 @@ export async function createPurchaseRequest(courseId: number): Promise<RequestRe
 
       const fields: [string, string][] = [
         ["Имя", student?.name || "—"],
-        ["Контакт", student?.email || "—"],
+        ["WhatsApp", waContact || "не указан"],
+        ["Email", student?.email || "—"],
         ["Курс", course.title],
         ["Стоимость", `${formatNumber(course.price)} ₸`],
-        ["Комментарий", note],
+        ["Комментарий", context],
       ];
 
       await sendEmail({
