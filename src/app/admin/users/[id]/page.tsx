@@ -34,7 +34,7 @@ function initials(name: string): string {
 }
 
 const METHOD_LABEL: Record<string, string> = {
-  whatsapp: "WhatsApp",
+  whatsapp: "Через менеджера",
   kaspi: "Kaspi",
   card: "Карта",
   manual: "Вручную",
@@ -160,8 +160,7 @@ export default async function AdminUserDetail({
             </Field>
           </div>
           <Field label="Способ">
-            <Select name="method" defaultValue="whatsapp">
-              <option value="whatsapp">WhatsApp</option>
+            <Select name="method" defaultValue="kaspi">
               <option value="kaspi">Kaspi</option>
               <option value="card">Карта</option>
               <option value="manual">Вручную</option>
@@ -290,22 +289,12 @@ export default async function AdminUserDetail({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="font-semibold">{e.title}</p>
               <Badge
-                variant={
-                  e.accessType === "locked"
-                    ? "neutral"
-                    : e.accessType === "trial"
-                      ? "gold"
-                      : "teal"
-                }
+                variant={e.accessType === "full" ? "teal" : "neutral"}
               >
-                {e.accessType === "locked"
-                  ? "Заблокирован"
-                  : e.accessType === "trial"
-                    ? "Пробный"
-                    : "Полный доступ"}
+                {e.accessType === "full" ? "Полный доступ" : "Заблокирован"}
               </Badge>
             </div>
-            {e.accessType !== "locked" && (
+            {e.accessType === "full" && (
               <div className="mt-3">
                 <div className="mb-1.5 flex items-center justify-between text-xs">
                   <span className="text-muted">Прогресс</span>

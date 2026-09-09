@@ -1,14 +1,15 @@
 import "server-only";
+import { createTransport } from "nodemailer";
 
 /**
  * Email seam. The whole app sends mail through `sendEmail` only, so swapping
  * providers is a one-file change.
  *
- * - RESEND_API_KEY set → sends via Resend's HTTP API (no dependency, just fetch).
- * - otherwise         → logs the message to the server console (dev/demo mode),
- *                       so flows work end-to-end without a provider configured.
+ * SMTP works with any provider: PS.KZ mail, Gmail Workspace, Mailgun, etc.
+ * Without SMTP configuration messages are logged instead of silently lost;
+ * the admin dashboard also shows a configuration warning.
  *
- * EMAIL_FROM sets the sender (e.g. "OQU <noreply@yourdomain.kz>").
+ * Required: SMTP_HOST, SMTP_USER, SMTP_PASSWORD and EMAIL_FROM.
  */
 
 export interface EmailMessage {
@@ -18,48 +19,76 @@ export interface EmailMessage {
   text?: string;
 }
 
-export function isEmailLive(): boolean {
-  return Boolean(process.env.RESEND_API_KEY);
+function value(name: string): string {
+  return (process.env[name] ?? "").trim();
 }
 
-function fromAddress(): string {
-  return process.env.EMAIL_FROM || "OQU <onboarding@resend.dev>";
+function smtpPort(): number {
+  const parsed = Number.parseInt(value("SMTP_PORT"), 10);
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 65535 ? parsed : 587;
+}
+
+function smtpSecure(port: number): boolean {
+  const configured = value("SMTP_SECURE").toLowerCase();
+  if (configured === "true" || configured === "1") return true;
+  if (configured === "false" || configured === "0") return false;
+  return port === 465;
+}
+
+/** Human-readable reason shown in the owner dashboard when SMTP is incomplete. */
+export function emailConfigIssue(): string | null {
+  if (!value("SMTP_HOST")) return "не задан SMTP_HOST";
+  if (!value("SMTP_USER")) return "не задан SMTP_USER";
+  if (!value("SMTP_PASSWORD")) return "не задан SMTP_PASSWORD";
+  if (!value("EMAIL_FROM")) return "не задан EMAIL_FROM";
+  return null;
+}
+
+export function isEmailLive(): boolean {
+  return emailConfigIssue() === null;
+}
+
+type MailTransport = ReturnType<typeof createTransport>;
+let transport: MailTransport | null = null;
+
+function smtpTransport(): MailTransport {
+  if (transport) return transport;
+
+  const port = smtpPort();
+  transport = createTransport({
+    host: value("SMTP_HOST"),
+    port,
+    secure: smtpSecure(port),
+    auth: { user: value("SMTP_USER"), pass: value("SMTP_PASSWORD") },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+  });
+  return transport;
 }
 
 export async function sendEmail(msg: EmailMessage): Promise<{ ok: boolean }> {
-  const apiKey = process.env.RESEND_API_KEY;
+  const configIssue = emailConfigIssue();
 
-  if (!apiKey) {
-    // Demo mode: no provider configured. Log so flows are testable in dev and
-    // so a misconfigured production deploy is obvious in the logs.
+  if (configIssue) {
     console.info(
-      `[email:demo] To: ${msg.to}\nSubject: ${msg.subject}\n${msg.text ?? msg.html}`,
+      `[email:disabled] ${configIssue}. To: ${msg.to}\nSubject: ${msg.subject}\n${msg.text ?? msg.html}`,
     );
-    return { ok: true };
+    return { ok: false };
   }
 
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        from: fromAddress(),
-        to: msg.to,
-        subject: msg.subject,
-        html: msg.html,
-        text: msg.text,
-      }),
+    await smtpTransport().sendMail({
+      from: value("EMAIL_FROM"),
+      to: msg.to,
+      replyTo: value("EMAIL_REPLY_TO") || undefined,
+      subject: msg.subject,
+      html: msg.html,
+      text: msg.text,
     });
-    if (!res.ok) {
-      console.error(`[email] Resend ${res.status}: ${await res.text()}`);
-      return { ok: false };
-    }
     return { ok: true };
   } catch (err) {
-    console.error("[email] send failed:", err);
+    console.error("[email] SMTP send failed:", err);
     return { ok: false };
   }
 }

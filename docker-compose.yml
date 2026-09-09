@@ -48,16 +48,16 @@ services:
       BOOTSTRAP_OWNER_EMAIL: ${BOOTSTRAP_OWNER_EMAIL}
       BOOTSTRAP_OWNER_PASSWORD: ${BOOTSTRAP_OWNER_PASSWORD}
       BOOTSTRAP_OWNER_NAME: ${BOOTSTRAP_OWNER_NAME}
-      # Optional integrations.
-      GROQ_API_KEY: ${GROQ_API_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      MENTOR_MODEL: ${MENTOR_MODEL}
-      RESEND_API_KEY: ${RESEND_API_KEY}
+      # SMTP notifications and password recovery.
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
       EMAIL_FROM: ${EMAIL_FROM}
-      # Contacts shown on the site and the inbox for new-lead notifications.
+      EMAIL_REPLY_TO: ${EMAIL_REPLY_TO}
+      # Public support email and the inbox for new-lead notifications.
       # Blank → the defaults compiled into src/lib/contacts.ts.
-      SUPPORT_WHATSAPP: ${SUPPORT_WHATSAPP}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL}
       OWNER_EMAIL: ${OWNER_EMAIL}
       # Seller details and refund terms behind /offer and /refund. Blank → those
@@ -78,12 +78,6 @@ services:
       LEGAL_REFUND_DAYS: ${LEGAL_REFUND_DAYS}
       LEGAL_REFUND_PROGRESS_PERCENT: ${LEGAL_REFUND_PROGRESS_PERCENT}
       LEGAL_REFUND_PAYOUT_DAYS: ${LEGAL_REFUND_PAYOUT_DAYS}
-      # Manual-payment details shown right after a purchase request. Blank →
-      # the student sees the old «менеджер свяжется с вами» text instead.
-      KASPI_NUMBER: ${KASPI_NUMBER}
-      KASPI_LINK: ${KASPI_LINK}
-      KASPI_RECIPIENT: ${KASPI_RECIPIENT}
-      PAYMENT_NOTE: ${PAYMENT_NOTE}
       MAX_VIDEO_MB: ${MAX_VIDEO_MB}
       # Free space the uploader refuses to eat into (MB). Postgres shares this
       # disk: filling it to the last byte takes the whole site down.

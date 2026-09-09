@@ -15,8 +15,8 @@ import {
 /**
  * OQU — Postgres schema (Drizzle ORM).
  * Core learning + gamification tables derived from the platform ТЗ.
- * Additional subsystems (AI mentor threads, certificates, tripwire,
- * CRM/leads) extend this file as those modules are built.
+ * Additional subsystems (certificates, CRM/leads) extend this file as those
+ * modules are built.
  */
 
 export const accessTypeEnum = pgEnum("access_type", ["full", "trial", "locked"]);
@@ -133,8 +133,6 @@ export const lessons = pgTable(
     videoMimeType: text("video_mime_type"),
     orderIndex: integer("order_index").notNull().default(0),
     videoDurationSec: integer("video_duration_sec").notNull().default(0),
-    /** Free preview: playable by any signed-in user even without buying the course. */
-    isFree: boolean("is_free").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("lessons_module_idx").on(t.moduleId)],
@@ -261,35 +259,6 @@ export const redemptions = pgTable(
   (t) => [uniqueIndex("redemptions_user_item_uidx").on(t.userId, t.itemId)],
 );
 
-/** AI mentor (NeuroHub) chat threads + messages. */
-export const mentorThreads = pgTable(
-  "mentor_threads",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => profiles.id, { onDelete: "cascade" }),
-    title: text("title").notNull().default("Новый чат"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("mentor_threads_user_idx").on(t.userId)],
-);
-
-export const mentorMessages = pgTable(
-  "mentor_messages",
-  {
-    id: serial("id").primaryKey(),
-    threadId: uuid("thread_id")
-      .notNull()
-      .references(() => mentorThreads.id, { onDelete: "cascade" }),
-    role: text("role").notNull(), // "user" | "assistant"
-    content: text("content").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("mentor_messages_thread_idx").on(t.threadId)],
-);
-
 /** Payments / purchase requests. Revenue = sum of `paid`; leads = `requested`. */
 export const payments = pgTable(
   "payments",
@@ -325,7 +294,7 @@ export const leads = pgTable(
   {
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
-    contact: text("contact").notNull(), // phone / WhatsApp / email as typed
+    contact: text("contact").notNull(), // phone or email as typed
     courseId: integer("course_id").references(() => courses.id, {
       onDelete: "set null",
     }),

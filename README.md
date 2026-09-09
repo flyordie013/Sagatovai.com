@@ -1,7 +1,7 @@
 # OQU — образовательная AI-платформа (дизайн NOMAD NIGHT)
 
 Production-фундамент новой платформы: премиальная тёмная тема **NOMAD NIGHT**,
-студенческий кабинет с каталогом курсов, геймификацией и AI-наставником.
+студенческий кабинет с каталогом курсов, видеоплеером и геймификацией.
 
 ## Стек
 
@@ -50,12 +50,12 @@ src/
     (app)/                # авторизованная зона (общая оболочка)
       layout.tsx          # AppShell (сайдбар + топбар + контент)
       page.tsx            # дашборд / каталог курсов
-      mentor|achievements|leaderboard|store|profile/  # разделы
+      achievements|leaderboard|store|profile/  # разделы
       course/[slug]/      # страница курса (async params — Next 16)
   components/
     ui/                   # Card, Badge, ProgressBar, ProgressRing
     layout/               # Brand, Sidebar, Topbar, MobileDrawer, AppShell
-    dashboard/            # Hero, CourseCard, StatsStrip, AiMentorCard, ...
+    dashboard/            # Hero, CourseCard, StatsStrip, ...
   data/                   # слой доступа к данным (seed → Postgres)
   db/                     # Drizzle schema + клиент
   lib/                    # utils (cn, форматирование, плюрализация), nav
@@ -75,15 +75,14 @@ src/
 - Дизайн-система NOMAD NIGHT + шрифты с кириллицей.
 - Адаптивная оболочка: сайдбар (десктоп) + drawer (мобайл, Esc/overlay/фокус-лок).
 - Дашборд: герой, статистика, каталог курсов (доступ full/locked/флагман),
-  правый рейл (AI-наставник, уровень/XP, миссия дня).
+  уровень/XP и миссия дня.
 - Заглушки разделов и страница курса (без битых ссылок).
 - Postgres-схема (Drizzle) + миграция + скрипты.
 
 ## Дальше (следующие фазы)
 
-Аутентификация (Auth.js) и RLS · подключение живой Postgres · страница курса
-(модули/уроки, видеоплеер, прогресс-гейтинг 80%) · чат AI-наставника · экраны
-геймификации · админка · онбординг. См. `../TZ-platform.md`.
+Дальнейшие улучшения ведутся поверх готовых модулей: собственная аутентификация,
+Postgres, видеоплеер, свободный порядок уроков, геймификация и админка.
 
 ## Скрипты
 

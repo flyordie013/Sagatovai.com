@@ -16,9 +16,9 @@ const jetbrains = JetBrains_Mono({
   weight: ["400", "500", "600"],
 });
 
-const TITLE = "OQU — образовательная платформа с AI-наставником";
+const TITLE = "OQU — практическое обучение AI";
 const DESCRIPTION =
-  "Изучай AI и собирай реальные проекты: курсы, персональный AI-наставник, геймификация обучения.";
+  "Изучайте AI и собирайте реальные проекты: практические курсы и понятный прогресс обучения.";
 
 /**
  * Absolute base for og:url / canonical / OG image links. Read from APP_URL
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   },
   description: DESCRIPTION,
   applicationName: "OQU",
-  // Link previews in WhatsApp/Telegram. The image itself comes from
+  // Link previews in social networks and messengers. The image itself comes from
   // app/opengraph-image.tsx — Next.js appends it to both card types.
   // Deliberately no `url`: metadata is merged shallowly per key, so every page
   // that does not declare its own openGraph would inherit og:url of the home

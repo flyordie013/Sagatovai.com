@@ -302,11 +302,6 @@ export default async function AdminCourseDetail({
                     <span className="shrink-0 font-mono text-xs text-faint">{li + 1}.</span>
                     <Video className="size-4 shrink-0 text-gold" />
                     <span className="min-w-0 truncate font-medium">{l.title}</span>
-                    {l.isFree && (
-                      <span className="shrink-0 rounded-md border border-teal/30 bg-teal/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal">
-                        Бесплатно
-                      </span>
-                    )}
                     {!l.videoUrl && !l.videoKey && (
                       <span className="shrink-0 rounded-md border border-line-strong bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
                         Нет видео
@@ -379,17 +374,6 @@ export default async function AdminCourseDetail({
                           <RichText text={l.content} className="mt-3 text-muted" />
                         </details>
                       )}
-                      <div className="rounded-xl border border-line bg-raised/50 p-3.5">
-                        <Checkbox
-                          name="isFree"
-                          defaultChecked={l.isFree}
-                          label="Бесплатный урок — открыт всем зарегистрированным, без покупки"
-                        />
-                        <p className="mt-1.5 pl-6.5 text-xs text-faint">
-                          Так делают вводные уроки: человек смотрит первые 1–2 урока, а
-                          дальше видит предложение купить курс.
-                        </p>
-                      </div>
                       <div>
                         <SubmitButton>Сохранить урок</SubmitButton>
                       </div>

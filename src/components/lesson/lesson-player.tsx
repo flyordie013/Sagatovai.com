@@ -3,13 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, ArrowRight, Trophy, Sparkles, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { saveProgress, completeLesson, type CompleteResult } from "@/app/(app)/lesson/actions";
 import { VideoPlayer } from "./video-player";
-
-const THRESHOLD = 80;
-/** Real playback needed before an unmeasurable video opens the gate. */
-const UNMEASURED_GRACE_SEC = 5;
 
 export function LessonPlayer({
   lessonId,
@@ -19,7 +14,6 @@ export function LessonPlayer({
   nextLessonId,
   resumeAt = 0,
   durationHint = 0,
-  canSkipGate = false,
   courseSlug,
 }: {
   lessonId: number;
@@ -31,8 +25,6 @@ export function LessonPlayer({
   resumeAt?: number;
   /** Lesson length from the DB, used when the file itself carries none. */
   durationHint?: number;
-  /** Staff previewing their own course — never gate them on watch time. */
-  canSkipGate?: boolean;
   /** Course slug — used to link back when the last lesson is finished. */
   courseSlug?: string;
 }) {
@@ -52,27 +44,8 @@ export function LessonPlayer({
   const [result, setResult] = useState<CompleteResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [videoError, setVideoError] = useState(false);
-  const [unmeasurable, setUnmeasurable] = useState(false);
-  const [reachedEnd, setReachedEnd] = useState(false);
 
   const hasVideo = Boolean(videoUrl);
-  // Completion opens when already done, there's no video, the video is broken,
-  // its length is unmeasurable, the student is staff previewing, the video
-  // played through to its end, or the accumulated watch threshold is met.
-  //
-  // Reaching the end counts on purpose: watch-time accounting undershoots for
-  // honest viewers (a re-watch, a buffering hiccup, playing in a background
-  // tab), and a student who is looking at the last frame has finished the
-  // lesson by any reasonable reading. `watchedPct` is still recorded from real
-  // playback only, so the progress bar keeps telling the truth.
-  const canComplete =
-    completed ||
-    !hasVideo ||
-    videoError ||
-    canSkipGate ||
-    unmeasurable ||
-    reachedEnd ||
-    watchedPct >= THRESHOLD;
 
   // The file's own length wins; `durationHint` covers screen recordings, whose
   // header has none. 0 = the watch percentage cannot be computed at all.
@@ -104,10 +77,6 @@ export function LessonPlayer({
 
     const total = durationOf(v);
     if (total <= 0) {
-      // Neither the file nor the lesson knows how long the video is, so there
-      // is no percentage to gate on — open the button after a few seconds of
-      // real playback instead of locking the student in the lesson forever.
-      if (watchedSecRef.current >= UNMEASURED_GRACE_SEC) setUnmeasurable(true);
       return;
     }
     const pct = Math.min(100, (watchedSecRef.current / total) * 100);
@@ -126,7 +95,7 @@ export function LessonPlayer({
 
   // Persist the LATEST progress on unmount (via ref — a stale closure over
   // `watchedPct` would save the initial value). Force-saves even sub-5% deltas,
-  // so leaving before the 80% gate still restores where you were.
+  // so leaving early still restores where you were.
   useEffect(() => {
     return () => persist(watchedPctRef.current, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,15 +148,11 @@ export function LessonPlayer({
             videoRef.current = v;
             lastTimeRef.current = v.currentTime;
             // Resume continues watch-accounting from the saved fraction —
-            // otherwise a lesson resumed past 20% could never reach 80% this
-            // session even if watched to the very end. Anti-skip is preserved:
+            // otherwise resumed progress would restart from zero. Anti-skip is preserved:
             // forward seeks still add nothing. Re-runs when the player recovers
             // a missing duration, which is when the baseline first computes.
             const total = durationOf(v);
             if (total > 0) {
-              // A length turned up after all (the probe recovered it) → the
-              // percentage is meaningful again, so re-arm the watch gate.
-              setUnmeasurable(false);
               watchedSecRef.current = Math.max(
                 watchedSecRef.current,
                 (savedPctRef.current / 100) * total,
@@ -198,9 +163,6 @@ export function LessonPlayer({
             // Save whatever was legitimately accumulated — do NOT force 100%,
             // so the recorded progress stays an honest watch figure.
             persist(watchedPctRef.current, true);
-            // Reaching the end opens the button regardless of that figure; see
-            // the note on `canComplete`.
-            setReachedEnd(true);
           }}
           onError={() => setVideoError(true)}
         />
@@ -212,21 +174,15 @@ export function LessonPlayer({
         </p>
       )}
 
-      {/* progress requirement — meaningless without a length, so hide it then */}
-      {hasVideo && !completed && !unmeasurable && (
+      {hasVideo && !completed && (
         <div className="rounded-xl border border-line bg-surface p-4">
           <div className="mb-1.5 flex items-center justify-between text-xs">
-            <span className="text-muted">
-              Просмотрено · нужно {THRESHOLD}% для завершения
-            </span>
+            <span className="text-muted">Просмотрено</span>
             <span className="nums font-medium text-text">{Math.round(watchedPct)}%</span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
             <div
-              className={cn(
-                "h-full rounded-full transition-[width] duration-300",
-                watchedPct >= THRESHOLD ? "bg-teal" : "bg-gradient-to-r from-gold to-gold-soft",
-              )}
+              className="h-full rounded-full bg-gradient-to-r from-gold to-gold-soft transition-[width] duration-300"
               style={{ width: `${Math.min(100, watchedPct)}%` }}
             />
           </div>
@@ -267,13 +223,8 @@ export function LessonPlayer({
           <button
             type="button"
             onClick={onComplete}
-            disabled={!canComplete || pending}
-            className={cn(
-              "inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition-colors",
-              canComplete
-                ? "bg-gold text-gold-ink shadow-glow hover:bg-gold-soft"
-                : "cursor-not-allowed border border-line-strong bg-raised text-faint",
-            )}
+            disabled={pending}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3 text-sm font-semibold text-gold-ink shadow-glow transition-colors hover:bg-gold-soft disabled:opacity-60"
           >
             {pending ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
             Завершить урок
@@ -285,9 +236,7 @@ export function LessonPlayer({
           </span>
         )}
 
-        {/* Only offer the next lesson once this one is done — the next lesson is
-            sequentially locked until then, so clicking it hit a wall. */}
-        {nextLessonId && completed && (
+        {nextLessonId && (
           <button
             type="button"
             onClick={() => router.push(`/lesson/${nextLessonId}`)}
@@ -298,8 +247,7 @@ export function LessonPlayer({
           </button>
         )}
 
-        {/* Last lesson done → the course is finished (sequential unlock guarantees
-            every earlier lesson is complete). Give it a real ending. */}
+        {/* On the final lesson, completion still gives a convenient route back. */}
         {!nextLessonId && completed && courseSlug && (
           <button
             type="button"
@@ -312,12 +260,6 @@ export function LessonPlayer({
         )}
       </div>
 
-      {!canComplete && hasVideo && (
-        <p className="text-xs text-faint">
-          Кнопка активируется после просмотра {THRESHOLD}% видео — или когда
-          досмотрите его до конца.
-        </p>
-      )}
     </div>
   );
 }

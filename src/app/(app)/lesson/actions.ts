@@ -11,7 +11,7 @@ import {
   achievements,
   userAchievements,
 } from "@/db/schema";
-import { requireUser } from "@/lib/session";
+import { requireUser, isStaff } from "@/lib/session";
 import { getLessonForStudent } from "@/data/course";
 import { levelForXp, rankForLevel, XP_PER_LESSON } from "@/lib/leveling";
 import { calendarDayDiff } from "@/lib/streak";
@@ -30,10 +30,10 @@ export interface CompleteResult {
 
 /** Persist watched percentage (max wins). Called periodically by the player. */
 export async function saveProgress(lessonId: number, pct: number): Promise<void> {
-  const { userId } = await requireUser();
-  // Reject writes to foreign / locked / not-yet-unlocked lessons.
-  const info = await getLessonForStudent(lessonId, userId);
-  if (!info || !info.canView || !info.unlocked) return;
+  const { userId, role } = await requireUser();
+  // Reject writes unless the student has explicit course access (staff may preview).
+  const info = await getLessonForStudent(lessonId, userId, isStaff(role));
+  if (!info || !info.canView) return;
   const clamped = Math.min(100, Math.max(0, Math.round(pct)));
   const db = await getDb();
   await db
@@ -46,19 +46,16 @@ export async function saveProgress(lessonId: number, pct: number): Promise<void>
 }
 
 export async function completeLesson(lessonId: number): Promise<CompleteResult> {
-  const { userId } = await requireUser();
+  const { userId, role } = await requireUser();
 
-  const info = await getLessonForStudent(lessonId, userId);
+  const info = await getLessonForStudent(lessonId, userId, isStaff(role));
   if (!info) return { ok: false, error: "Урок не найден" };
   if (!info.canView)
     return { ok: false, error: "Этот урок доступен после покупки курса" };
-  if (!info.unlocked)
-    return { ok: false, error: "Сначала завершите предыдущий урок" };
   if (info.completed)
     return { ok: true, alreadyCompleted: true, xpEarned: 0, nextLessonId: info.nextLessonId };
-  // The watch-percentage gate is enforced client-side (the "Завершить" button stays
-  // disabled until threshold — or unlocks if the video fails to load, so a broken
-  // stream never traps the student). We don't hard-block here to avoid that trap.
+  // Completion is an optional progress marker and XP action. Watching a specific
+  // percentage is deliberately not required; students choose their own order.
 
   const db = await getDb();
   const now = new Date();

@@ -56,7 +56,7 @@ export function LeadForm({
 
       <div>
         <label htmlFor="lead-contact" className="mb-1.5 block text-xs font-medium text-muted">
-          Телефон, WhatsApp или email
+          Телефон или email
         </label>
         <input
           id="lead-contact"

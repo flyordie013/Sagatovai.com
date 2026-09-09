@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 // search results and would compete with /courses for the same queries.
 export const metadata: Metadata = {
   title: "Регистрация",
-  description: "Создайте аккаунт и начните учиться с AI-наставником.",
+  description: "Создайте аккаунт и получите доступ к выбранным курсам.",
   robots: { index: false },
 };
 

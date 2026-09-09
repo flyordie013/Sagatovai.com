@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { BookOpen, ArrowRight, MessageCircle } from "lucide-react";
+import { BookOpen, ArrowRight } from "lucide-react";
 import type { CourseSummary } from "@/types";
-import { SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
 import { CourseCard } from "./course-card";
 
 export function CourseGrid({ courses }: { courses: CourseSummary[] }) {
@@ -14,7 +13,7 @@ export function CourseGrid({ courses }: { courses: CourseSummary[] }) {
         <p className="font-display text-lg font-bold">Пока нет курсов</p>
         <p className="mt-1 max-w-sm text-sm text-muted">
           Как только вам откроют доступ к курсу, он появится здесь. А пока —
-          посмотрите каталог или напишите нам.
+          посмотрите каталог и оставьте заявку на нужный курс.
         </p>
         {/* An empty account is the student's first screen: give it somewhere to
             go instead of ending on «напишите менеджеру» with no contact. */}
@@ -26,15 +25,6 @@ export function CourseGrid({ courses }: { courses: CourseSummary[] }) {
             Смотреть каталог
             <ArrowRight className="size-4" />
           </Link>
-          <a
-            href={SUPPORT_WHATSAPP_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-line-strong bg-raised px-4 py-3 text-sm font-semibold text-text transition-colors hover:bg-raised-2"
-          >
-            <MessageCircle className="size-4" />
-            Написать в WhatsApp
-          </a>
         </div>
       </div>
     );

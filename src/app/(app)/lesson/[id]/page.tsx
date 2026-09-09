@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, ArrowRight, Lock, Bot, FileText } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileText } from "lucide-react";
 import { requireUser, isStaff } from "@/lib/session";
 import { getLessonForStudent } from "@/data/course";
 import { LessonPlayer } from "@/components/lesson/lesson-player";
@@ -19,13 +19,12 @@ export default async function LessonPage({
   if (!Number.isInteger(lessonId)) notFound();
 
   const { userId, role } = await requireUser();
-  const data = await getLessonForStudent(lessonId, userId);
+  const data = await getLessonForStudent(lessonId, userId, isStaff(role));
   if (!data) notFound();
 
-  const { lesson, moduleTitle, course, canView, unlocked, completed, watchedPct, position, total, prevLessonId, nextLessonId } = data;
+  const { lesson, moduleTitle, course, canView, completed, watchedPct, position, total, prevLessonId, nextLessonId } = data;
 
-  // Not a free preview and the course isn't bought → back to the course page,
-  // which shows the free lessons plus the purchase CTA.
+  // Students without admin-granted access return to the course request screen.
   if (!canView) redirect(`/course/${course.slug}`);
 
   return (
@@ -50,76 +49,33 @@ export default async function LessonPage({
         )}
       </div>
 
-      {!unlocked ? (
-        <Card className="p-6 text-center">
-          <div className="mx-auto grid size-12 place-items-center rounded-xl border border-line-strong bg-white/5 text-muted">
-            <Lock className="size-6" />
-          </div>
-          <h2 className="mt-3 font-display text-lg font-bold">Урок заблокирован</h2>
-          <p className="mt-1 text-sm text-muted">
-            Сначала завершите предыдущий урок.
+      <LessonPlayer
+        lessonId={lesson.id}
+        // Uploaded video streams through the access-checked route; an
+        // external link (legacy) is used as-is.
+        videoUrl={lesson.videoKey ? `/api/lessons/${lesson.id}/video` : lesson.videoUrl}
+        initialWatchedPct={watchedPct}
+        initialCompleted={completed}
+        nextLessonId={nextLessonId}
+        resumeAt={
+          completed || !lesson.videoDurationSec
+            ? 0
+            : Math.floor((watchedPct / 100) * lesson.videoDurationSec)
+        }
+        // Fallback length for files that carry none in their header (screen
+        // recordings report Infinity) — without it the watch % never moves.
+        durationHint={lesson.videoDurationSec}
+        courseSlug={course.slug}
+      />
+
+      {lesson.content && (
+        <Card className="p-5">
+          <p className="mb-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-faint">
+            <FileText className="size-3.5" />
+            Материалы урока
           </p>
-          {prevLessonId && (
-            <Link
-              href={`/lesson/${prevLessonId}`}
-              className="mt-4 inline-flex items-center gap-2 rounded-xl border border-line-strong bg-raised px-4 py-2.5 text-sm font-semibold text-text transition-colors hover:bg-raised-2"
-            >
-              <ArrowLeft className="size-4" />
-              К предыдущему уроку
-            </Link>
-          )}
+          <RichText text={lesson.content} className="text-muted" />
         </Card>
-      ) : (
-        <>
-          <LessonPlayer
-            lessonId={lesson.id}
-            // Uploaded video streams through the access-checked route; an
-            // external link (legacy) is used as-is.
-            videoUrl={lesson.videoKey ? `/api/lessons/${lesson.id}/video` : lesson.videoUrl}
-            initialWatchedPct={watchedPct}
-            initialCompleted={completed}
-            nextLessonId={nextLessonId}
-            resumeAt={
-              completed || !lesson.videoDurationSec
-                ? 0
-                : Math.floor((watchedPct / 100) * lesson.videoDurationSec)
-            }
-            // Fallback length for files that carry none in their header (screen
-            // recordings report Infinity) — without it the watch % never moves.
-            durationHint={lesson.videoDurationSec}
-            // Staff review their own lessons — gating them on watch time just
-            // gets in the way of checking that an upload works.
-            canSkipGate={isStaff(role)}
-            courseSlug={course.slug}
-          />
-
-          {lesson.content && (
-            <Card className="p-5">
-              <p className="mb-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-faint">
-                <FileText className="size-3.5" />
-                Материалы урока
-              </p>
-              <RichText text={lesson.content} className="text-muted" />
-            </Card>
-          )}
-
-          {/* contextual AI mentor */}
-          <Card className="flex items-center gap-3 p-4">
-            <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-gold/25 bg-gold/10 text-gold">
-              <Bot className="size-5" strokeWidth={1.8} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Не понятно? Спросите AI-наставника</p>
-              <p className="text-xs text-muted">Объяснит тему урока простыми словами</p>
-            </div>
-            <Link
-              href="/mentor"
-              className="shrink-0 rounded-xl border border-line-strong bg-raised px-3 py-2 text-xs font-semibold text-text transition-colors hover:bg-raised-2"
-            >
-              Спросить
-            </Link>
-          </Card>
-        </>
       )}
 
       {/* prev / next */}

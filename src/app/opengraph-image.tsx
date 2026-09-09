@@ -1,11 +1,11 @@
 import { ImageResponse } from "next/og";
 
 /**
- * Link preview for WhatsApp/Telegram/social, in the NOMAD NIGHT palette.
+ * Link preview for social networks and messengers, in the NOMAD NIGHT palette.
  * Text stays with the font bundled into next/og (covers Cyrillic), so nothing
  * has to be fetched at build time.
  */
-export const alt = "OQU — образовательная платформа с AI-наставником";
+export const alt = "OQU — практическое обучение AI";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -42,7 +42,6 @@ export default function OpengraphImage() {
           </div>
         </div>
 
-        {/* Split by hand: satori would otherwise wrap on the "AI-" hyphen. */}
         <div
           style={{
             display: "flex",
@@ -52,12 +51,12 @@ export default function OpengraphImage() {
             lineHeight: 1.2,
           }}
         >
-          <div style={{ display: "flex" }}>Образовательная платформа</div>
-          <div style={{ display: "flex" }}>с AI-наставником</div>
+          <div style={{ display: "flex" }}>Практические курсы</div>
+          <div style={{ display: "flex" }}>по искусственному интеллекту</div>
         </div>
 
         <div style={{ display: "flex", marginTop: 22, fontSize: 30, color: "#9a9aa6" }}>
-          Курсы по AI, реальные проекты и геймификация обучения
+          Понятные уроки, реальные проекты и прогресс обучения
         </div>
 
         <div style={{ display: "flex", marginTop: 54, alignItems: "center", gap: 18 }}>

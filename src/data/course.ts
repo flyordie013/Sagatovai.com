@@ -12,28 +12,20 @@ import {
 
 export type CourseAccess = "full" | "trial" | "locked" | "none";
 
-/**
- * Effective course access. An explicit enrollment always wins; otherwise a
- * free course is open to any signed-in user (registration auto-enrolls, but
- * courses created later — or seeded users — must not be shut out).
- */
+/** Effective course access. Only staff or an explicit enrollment may read lessons. */
 async function accessFor(
   db: Awaited<ReturnType<typeof getDb>>,
   userId: string,
-  course: { id: number; price: number; isPublished: boolean; isArchived: boolean },
+  course: { id: number },
+  staff: boolean,
 ): Promise<CourseAccess> {
+  if (staff) return "full";
   const [e] = await db
     .select({ a: enrollments.accessType })
     .from(enrollments)
     .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, course.id)))
     .limit(1);
-  // An explicit enrollment always wins — a student who paid keeps access even
-  // if the owner later unpublishes the course to edit it.
-  if (e) return e.a;
-  // Not enrolled: only a PUBLISHED free course is open. Without the published
-  // check, a draft course (price defaults to 0 in the create form) would be
-  // readable by any signed-in user before release.
-  return course.price === 0 && course.isPublished && !course.isArchived ? "full" : "none";
+  return e?.a ?? "none";
 }
 
 /** A course nobody is enrolled in is invisible until it's published. */
@@ -57,7 +49,7 @@ function hiddenFromStudent(
 export function courseVisibleToStudent() {
   return or(
     and(eq(courses.isPublished, true), eq(courses.isArchived, false)),
-    ne(enrollments.accessType, "locked"),
+    eq(enrollments.accessType, "full"),
   );
 }
 
@@ -71,7 +63,6 @@ async function orderedLessons(db: Awaited<ReturnType<typeof getDb>>, courseId: n
       moduleOrder: modules.orderIndex,
       order: lessons.orderIndex,
       duration: lessons.videoDurationSec,
-      isFree: lessons.isFree,
     })
     .from(lessons)
     .innerJoin(modules, eq(lessons.moduleId, modules.id))
@@ -103,20 +94,16 @@ export interface StudentLesson {
   title: string;
   duration: number;
   completed: boolean;
-  /** Sequential gate: free preview, first lesson, or the previous one is done. */
-  unlocked: boolean;
-  /** Marked as a free preview by the owner. */
-  isFree: boolean;
-  /** Sequential gate passed AND the student is allowed to watch it at all. */
+  /** Every lesson is playable as soon as the administrator grants course access. */
   playable: boolean;
 }
 
 /** Owning the course (paid or trial) opens every lesson. */
 export function hasCourseAccess(access: CourseAccess): boolean {
-  return access === "full" || access === "trial";
+  return access === "full";
 }
 
-export async function getCourseForStudent(slug: string, userId: string) {
+export async function getCourseForStudent(slug: string, userId: string, staff = false) {
   const db = await getDb();
 
   const [course] = await db
@@ -126,7 +113,7 @@ export async function getCourseForStudent(slug: string, userId: string) {
     .limit(1);
   if (!course) return null;
 
-  const access = await accessFor(db, userId, course);
+  const access = await accessFor(db, userId, course, staff);
   // Draft/archived courses are 404 for everyone except enrolled students.
   if (hiddenFromStudent(course, access)) return null;
 
@@ -151,17 +138,6 @@ export async function getCourseForStudent(slug: string, userId: string) {
   const ordered = await orderedLessons(db, course.id);
   const done = await completedIds(db, userId, ordered.map((l) => l.id));
 
-  // Sequential unlock: a lesson is unlocked if it's first or the previous is done.
-  // A free preview always opens, whatever its position — the gate would
-  // otherwise bury every preview that isn't lesson №1 behind lessons the
-  // student can't even watch.
-  const unlocked = new Set<number>();
-  for (let i = 0; i < ordered.length; i++) {
-    if (i === 0 || ordered[i].isFree || done.has(ordered[i - 1].id)) {
-      unlocked.add(ordered[i].id);
-    }
-  }
-
   const owns = hasCourseAccess(access);
 
   const byModule = new Map<number, StudentLesson[]>();
@@ -172,22 +148,17 @@ export async function getCourseForStudent(slug: string, userId: string) {
       title: l.title,
       duration: l.duration,
       completed: done.has(l.id),
-      unlocked: unlocked.has(l.id),
-      isFree: l.isFree,
-      playable: (owns || l.isFree) && unlocked.has(l.id),
+      playable: owns,
     });
     byModule.set(l.moduleId, list);
   }
 
-  // "Continue" should never point at a lesson the student can't open.
-  const nextLesson = ordered.find((l) => !done.has(l.id) && (owns || l.isFree));
-  const freeLessons = ordered.filter((l) => l.isFree).length;
+  const nextLesson = owns ? ordered.find((l) => !done.has(l.id)) : undefined;
 
   return {
     course,
     access,
     owns,
-    freeLessons,
     requested: Boolean(openRequest),
     totalLessons: ordered.length,
     completedLessons: done.size,
@@ -210,11 +181,8 @@ export interface CourseSuggestion {
  * The next course to offer a student who just finished one — the moment they
  * are most likely to buy again, instead of the current dead end.
  *
- * Only PUBLISHED, non-archived, PAID courses the student holds no enrollment
- * for. A free published course is already open to them (see `accessFor`), so
- * pitching it would be pointless; an enrollment of any kind means the owner has
- * already decided about that course. Ordering follows the owner's own catalog
- * order, flagship first.
+ * Only published, non-archived, paid courses without an enrollment are offered.
+ * Ordering follows the owner's catalog order, flagship first.
  */
 export async function getNextCourseSuggestion(
   userId: string,
@@ -251,7 +219,7 @@ export async function getNextCourseSuggestion(
   return next ?? null;
 }
 
-export async function getLessonForStudent(lessonId: number, userId: string) {
+export async function getLessonForStudent(lessonId: number, userId: string, staff = false) {
   const db = await getDb();
 
   const [row] = await db
@@ -273,29 +241,21 @@ export async function getLessonForStudent(lessonId: number, userId: string) {
     .limit(1);
   if (!course) return null;
 
-  const access = await accessFor(db, userId, course);
+  const access = await accessFor(db, userId, course, staff);
   // Same gate as the course page — closes /lesson/[id], the video stream,
   // saveProgress and completeLesson for unreleased content in one place.
   if (hiddenFromStudent(course, access)) return null;
 
   const ordered = await orderedLessons(db, course.id);
-  const done = await completedIds(db, userId, ordered.map((l) => l.id));
   const index = ordered.findIndex((l) => l.id === lessonId);
-  // Same gate as the course page (free previews ignore the sequence). This also
-  // opens /api/lessons/[id]/video, which reuses `unlocked` + `canView`.
-  const unlocked =
-    index === 0 || row.lesson.isFree || (index > 0 && done.has(ordered[index - 1].id));
-
   const [progress] = await db
     .select({ watchedPct: lessonProgress.watchedPct, completed: lessonProgress.completed })
     .from(lessonProgress)
     .where(and(eq(lessonProgress.userId, userId), eq(lessonProgress.lessonId, lessonId)))
     .limit(1);
 
-  // Free preview lessons are watchable without owning the course; everything
-  // else needs an enrollment. The sequential gate applies on top of both.
   const owns = hasCourseAccess(access);
-  const canView = owns || row.lesson.isFree;
+  const canView = owns;
 
   return {
     lesson: row.lesson,
@@ -304,7 +264,6 @@ export async function getLessonForStudent(lessonId: number, userId: string) {
     access,
     owns,
     canView,
-    unlocked,
     completed: progress?.completed ?? false,
     watchedPct: progress?.watchedPct ?? 0,
     position: index + 1,

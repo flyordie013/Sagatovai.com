@@ -76,10 +76,8 @@ export async function getDashboard(): Promise<DashboardData> {
   const courseList: CourseSummary[] = enrolled.map((e) => {
     const total = totalByCourse.get(e.id) ?? 0;
     const done = doneByCourse.get(e.id) ?? 0;
-    // No enrollment row → free courses stay open to everyone, paid ones lock.
-    // Must match accessFor() in data/course.ts or the catalog and the course
-    // page would disagree about the same course.
-    const access = e.accessType ?? (e.price === 0 ? "full" : "locked");
+    // No enrollment row always means locked. Only an administrator grants access.
+    const access = e.accessType === "full" ? "full" : "locked";
     const locked = access === "locked";
     return {
       id: e.id,

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SUPPORT_PHONE_DISPLAY, SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
+import { SUPPORT_EMAIL } from "@/lib/contacts";
 
 export const metadata: Metadata = {
   title: "Политика конфиденциальности",
@@ -28,7 +28,7 @@ export default function PrivacyPage() {
         <section className="space-y-2">
           <h2 className="font-display text-lg font-bold text-text">Какие данные мы собираем</h2>
           <p>
-            Имя и контактные данные (телефон, WhatsApp или email), которые вы указываете в
+            Имя и контактные данные (телефон или email), которые вы указываете в
             форме заявки или при регистрации; данные об обучении (пройденные уроки, прогресс);
             технические данные, необходимые для работы сервиса.
           </p>
@@ -56,8 +56,8 @@ export default function PrivacyPage() {
           <h2 className="font-display text-lg font-bold text-text">Передача третьим лицам</h2>
           <p>
             Мы не продаём и не передаём ваши данные третьим лицам, кроме случаев, когда это
-            необходимо для работы сервиса (хостинг, отправка писем, мессенджеры для связи с
-            вами) или прямо требуется законодательством Республики Казахстан.
+            необходимо для работы сервиса (хостинг и отправка писем) или прямо требуется
+            законодательством Республики Казахстан.
           </p>
         </section>
 
@@ -77,14 +77,12 @@ export default function PrivacyPage() {
           </p>
           <ul className="space-y-1.5">
             <li>
-              WhatsApp:{" "}
+              Email:{" "}
               <a
-                href={SUPPORT_WHATSAPP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`mailto:${SUPPORT_EMAIL}`}
                 className="underline underline-offset-2 transition-colors hover:text-text"
               >
-                {SUPPORT_PHONE_DISPLAY}
+                {SUPPORT_EMAIL}
               </a>
             </li>
             <li>

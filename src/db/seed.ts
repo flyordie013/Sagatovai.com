@@ -22,7 +22,7 @@ const {
   payments,
 } = schema;
 
-// Self-hosted sample clip (public/) so the lesson player always loads (short → quick 80%).
+// Self-hosted sample clip (public/) so the lesson player always loads in development.
 const SAMPLE_VIDEO = "/sample-lesson.mp4";
 
 const OWNER_ID = "00000000-0000-4000-8000-000000000001";
@@ -163,7 +163,7 @@ export async function seedIfEmpty(db: DB): Promise<void> {
       {
         slug: "integrator",
         title: "ИИ-Менеджер продаж",
-        description: "WhatsApp/Telegram-боты, CRM, автоматизация",
+        description: "Чат-боты, CRM и автоматизация",
         icon: "bot",
         weeks: 4,
         rating: 4.9,
@@ -243,7 +243,7 @@ export async function seedIfEmpty(db: DB): Promise<void> {
   await seedModules(courseId.integrator, [
     {
       title: "GPT-боты и интеграции",
-      lessons: ["Основы GPT-ботов", "Подключение к WhatsApp", "Интеграция с CRM"],
+      lessons: ["Основы GPT-ботов", "Подключение к мессенджеру", "Интеграция с CRM"],
     },
     {
       title: "Автоматизация",
@@ -273,7 +273,7 @@ export async function seedIfEmpty(db: DB): Promise<void> {
 
   // ---- enrollments (access / purchases) ------------------------------------
   await db.insert(enrollments).values([
-    // Данияр: creator + programmer (free/included), integrator locked
+    // Данияр: access granted to two courses, integrator locked
     { userId: DEV_USER_ID, courseId: courseId.creator, accessType: "full" },
     { userId: DEV_USER_ID, courseId: courseId.programmer, accessType: "full" },
     { userId: DEV_USER_ID, courseId: courseId.integrator, accessType: "locked" },
@@ -285,7 +285,7 @@ export async function seedIfEmpty(db: DB): Promise<void> {
     { userId: DARIA_ID, courseId: courseId.creator, accessType: "full" },
     { userId: DARIA_ID, courseId: courseId.programmer, accessType: "full" },
     { userId: DARIA_ID, courseId: courseId.integrator, accessType: "full" },
-    // Айгерим: free courses only
+    // Айгерим: access granted to one course
     { userId: AIGERIM_ID, courseId: courseId.creator, accessType: "full" },
     { userId: AIGERIM_ID, courseId: courseId.integrator, accessType: "locked" },
     // Тимур: just started
@@ -371,8 +371,8 @@ export async function seedIfEmpty(db: DB): Promise<void> {
 
   // ---- payments (real sales + one open request) -----------------------------
   await db.insert(payments).values([
-    { userId: ASKAR_ID, courseId: courseId.integrator, amount: 120000, status: "paid", method: "whatsapp", note: "Оплата через менеджера" },
-    { userId: DARIA_ID, courseId: courseId.integrator, amount: 120000, status: "paid", method: "whatsapp", note: "Оплата через менеджера" },
+    { userId: ASKAR_ID, courseId: courseId.integrator, amount: 120000, status: "paid", method: "manual", note: "Оплата подтверждена менеджером" },
+    { userId: DARIA_ID, courseId: courseId.integrator, amount: 120000, status: "paid", method: "manual", note: "Оплата подтверждена менеджером" },
     { userId: TIMUR_ID, courseId: courseId.integrator, amount: 120000, status: "requested", method: "manual", note: "Заявка из каталога" },
   ]);
 

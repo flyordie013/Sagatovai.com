@@ -2,7 +2,6 @@ import { getDashboard } from "@/data/dashboard";
 import { Hero } from "@/components/dashboard/hero";
 import { StatsStrip } from "@/components/dashboard/stats-strip";
 import { CourseGrid } from "@/components/dashboard/course-grid";
-import { AiMentorCard } from "@/components/dashboard/ai-mentor-card";
 import { LevelCard } from "@/components/dashboard/level-card";
 import { MissionCard } from "@/components/dashboard/mission-card";
 
@@ -28,7 +27,6 @@ export default async function DashboardPage() {
         <CourseGrid courses={data.courses} />
 
         <aside className="space-y-4">
-          <AiMentorCard />
           <LevelCard user={data.user} />
           <MissionCard mission={data.mission} completedLessons={data.completedLessons} />
         </aside>

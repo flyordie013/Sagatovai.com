@@ -48,7 +48,7 @@ export async function submitLead(
   const courseIdRaw = (formData.get("courseId") ?? "").toString().trim();
 
   if (!name || !contact) {
-    return { error: "Укажите имя и контакт — телефон, WhatsApp или email." };
+    return { error: "Укажите имя и контакт — телефон или email." };
   }
   if (name.length > MAX.name || contact.length > MAX.contact) {
     return { error: "Слишком длинное значение в поле." };
@@ -62,8 +62,7 @@ export async function submitLead(
   // Two buckets, because KZ mobile carriers put dozens of real visitors behind
   // one CGNAT address: the tight limit is per contact (nobody sends the same
   // form twice in ten minutes), and the address as a whole gets a much looser
-  // cap that only a flood can reach. The error keeps the direct WhatsApp route
-  // open either way.
+  // cap that only a flood can reach.
   if (
     !rateLimit(`lead:${ip}:${contact}`, {
       max: 2,

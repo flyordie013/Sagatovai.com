@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
+import { SUPPORT_EMAIL } from "@/lib/contacts";
 import { ACCESS_MONTHS, LEGAL_UPDATED, SELLER, isRefundConfigured } from "@/lib/legal";
 import { pluralize } from "@/lib/utils";
 
@@ -57,7 +57,7 @@ export default function OfferPage() {
           <ul className="list-disc space-y-1.5 pl-5">
             <li>видеоуроки и сопровождающие материалы курса;</li>
             <li>практические задания и проверка прогресса в личном кабинете;</li>
-            <li>AI-наставник, который отвечает на вопросы по проходимому уроку.</li>
+            <li>личный кабинет с прогрессом и материалами курса.</li>
           </ul>
           <p>
             Услуги носят информационно-консультационный характер. Состав курса, его программа
@@ -217,10 +217,9 @@ export default function OfferPage() {
             Ученика.
           </p>
           <p>
-            Ответы AI-наставника носят вспомогательный характер и могут содержать неточности —
-            их следует проверять. Исполнитель не отвечает за перебои, вызванные сбоями на
-            стороне Ученика (оборудование, интернет) или третьих лиц (хостинг, платёжные
-            сервисы, мессенджеры, поставщики AI-моделей), а также за обстоятельства
+            Исполнитель не отвечает за перебои, вызванные сбоями на стороне Ученика
+            (оборудование, интернет) или третьих лиц (хостинг, платёжные сервисы),
+            а также за обстоятельства
             непреодолимой силы. При длительной недоступности платформы по вине Исполнителя
             срок доступа продлевается на соответствующий период.
           </p>
@@ -294,21 +293,12 @@ export default function OfferPage() {
               <dt className="shrink-0 text-faint sm:w-40">Адрес</dt>
               <dd className="text-text">{seller.address}</dd>
             </div>
-            <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
-              <dt className="shrink-0 text-faint sm:w-40">Телефон</dt>
-              <dd className="nums text-text">
-                {seller.phone ?? (
-                  <a
-                    href={SUPPORT_WHATSAPP_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline underline-offset-2 transition-colors hover:text-gold"
-                  >
-                    {SUPPORT_PHONE_DISPLAY}
-                  </a>
-                )}
-              </dd>
-            </div>
+            {seller.phone && (
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                <dt className="shrink-0 text-faint sm:w-40">Телефон</dt>
+                <dd className="nums text-text">{seller.phone}</dd>
+              </div>
+            )}
             <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
               <dt className="shrink-0 text-faint sm:w-40">Email</dt>
               <dd className="break-words text-text">{seller.email ?? SUPPORT_EMAIL}</dd>

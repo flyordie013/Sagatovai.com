@@ -1,11 +1,11 @@
-import { requireUser } from "@/lib/session";
+import { requireUser, isStaff } from "@/lib/session";
 import { getLessonForStudent } from "@/data/course";
 import { videoSize, readVideoRange } from "@/lib/storage";
 
 /**
  * Streams a lesson's uploaded video, enforcing the SAME access rules as the
- * lesson page: the student must own the course (or the lesson is a free
- * preview) and the sequential gate must be open. Files live outside `public/`
+ * lesson page: the student must have explicit course access (staff may preview).
+ * Files live outside `public/`
  * precisely so they can never be fetched without passing through here.
  *
  * Implements HTTP Range so seeking works and Safari plays at all.
@@ -62,15 +62,15 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { userId } = await requireUser();
+  const { userId, role } = await requireUser();
 
   const { id } = await params;
   const lessonId = Number.parseInt(id, 10);
   if (!Number.isInteger(lessonId)) return new Response("Bad request", { status: 400 });
 
-  const info = await getLessonForStudent(lessonId, userId);
+  const info = await getLessonForStudent(lessonId, userId, isStaff(role));
   if (!info || !info.lesson.videoKey) return new Response("Not found", { status: 404 });
-  if (!info.canView || !info.unlocked) return new Response("Forbidden", { status: 403 });
+  if (!info.canView) return new Response("Forbidden", { status: 403 });
 
   const key = info.lesson.videoKey;
   const size = await videoSize(key);

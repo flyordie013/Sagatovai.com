@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
+import { SUPPORT_EMAIL } from "@/lib/contacts";
 import { LEGAL_UPDATED, REFUND, SELLER } from "@/lib/legal";
 import { pluralize } from "@/lib/utils";
 
@@ -74,16 +74,7 @@ export default function RefundPage() {
         <section className="space-y-2">
           <h2 className="font-display text-lg font-bold text-text">Как подать заявление</h2>
           <p>
-            Напишите нам в{" "}
-            <a
-              href={SUPPORT_WHATSAPP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-2 transition-colors hover:text-text"
-            >
-              WhatsApp <span className="nums">{SUPPORT_PHONE_DISPLAY}</span>
-            </a>{" "}
-            или на почту{" "}
+            Напишите нам на почту{" "}
             <a
               href={`mailto:${seller.email ?? SUPPORT_EMAIL}`}
               className="underline underline-offset-2 transition-colors hover:text-text"

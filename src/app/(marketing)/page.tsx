@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Bot, Trophy, PlayCircle, Sparkles, MessageCircle } from "lucide-react";
+import { ArrowRight, Trophy, PlayCircle, ClipboardCheck, MessageCircle } from "lucide-react";
 import { listPublicCourses } from "@/data/public";
 import { PublicCourseCard, CoursesEmptyState } from "./public-course-card";
 import { LeadForm } from "./lead-form";
 
 export const metadata: Metadata = {
-  title: "OQU — обучение AI с персональным наставником",
+  title: "OQU — практическое обучение AI",
   description:
-    "Практические курсы по искусственному интеллекту на русском языке: нейросети для контента, AI-менеджер продаж, vibe-coding. С персональным AI-наставником и реальными проектами.",
+    "Практические курсы по искусственному интеллекту на русском языке: от первого промпта до готового проекта.",
   // Relative — resolved against metadataBase from app/layout.tsx.
   alternates: { canonical: "/" },
 };
@@ -20,9 +20,9 @@ const STEPS = [
     text: "Каждый урок — одна тема и практика. Без воды и трёхчасовых лекций.",
   },
   {
-    icon: Bot,
-    title: "Спрашиваете AI-наставника",
-    text: "Он знает, какой урок вы проходите, и объясняет именно вашу тему — круглосуточно.",
+    icon: ClipboardCheck,
+    title: "Закрепляете на практике",
+    text: "Материалы и задания помогают сразу применить каждую тему к своей задаче.",
   },
   {
     icon: Trophy,
@@ -52,7 +52,7 @@ export default async function LandingPage() {
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
             Практические курсы на русском языке — от первого промпта до готового продукта.
-            С персональным AI-наставником, который помнит, что вы проходите.
+            Все уроки доступны сразу после открытия курса администратором.
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <Link
@@ -120,44 +120,6 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* ---------------- mentor ---------------- */}
-      <section className="mx-auto max-w-[1120px] px-4 py-16 sm:px-6 sm:py-20">
-        <div className="grid items-center gap-8 rounded-3xl border border-line bg-gradient-to-b from-raised to-surface p-6 shadow-card ring-inset-hair sm:p-10 lg:grid-cols-2">
-          <div>
-            <p className="mb-2 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.28em] text-teal">
-              <Sparkles className="size-3.5" />
-              Главная особенность
-            </p>
-            <h2 className="font-display text-2xl font-extrabold sm:text-3xl">
-              AI-наставник, который знает ваш урок
-            </h2>
-            <p className="mt-3 text-sm leading-relaxed text-muted sm:text-base">
-              Застряли на теме — спрашивайте сразу, не дожидаясь ответа куратора. Наставник
-              видит, какой курс и какой урок вы сейчас проходите, и объясняет простыми
-              словами столько раз, сколько нужно.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-line bg-ink/60 p-4">
-            <div className="mb-3 flex items-center gap-2 border-b border-line pb-3">
-              <span className="grid size-8 place-items-center rounded-lg border border-teal/30 bg-teal/10 text-teal">
-                <Bot className="size-4" />
-              </span>
-              <span className="font-display text-sm font-bold">AI-Наставник</span>
-              <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-teal">
-                <span className="size-1.5 rounded-full bg-teal" />
-                online
-              </span>
-            </div>
-            <p className="ml-auto mb-2 w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-gold/15 px-3.5 py-2 text-sm text-text">
-              Не понял тему этого урока, объясни проще
-            </p>
-            <p className="w-fit max-w-[90%] rounded-2xl rounded-bl-sm border border-line bg-raised px-3.5 py-2 text-sm text-muted">
-              Вижу, вы на уроке «Промпт-инжиниринг». Давайте по шагам, на вашем примере…
-            </p>
-          </div>
-        </div>
-      </section>
-
       {/* ---------------- lead form ---------------- */}
       <section id="zayavka" className="border-t border-line bg-surface/40 scroll-mt-20">
         <div className="mx-auto max-w-[1120px] px-4 py-16 sm:px-6 sm:py-20">
@@ -172,7 +134,7 @@ export default async function LandingPage() {
               </h2>
               <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">
                 Оставьте контакт — свяжемся, подберём курс под вашу задачу и откроем доступ.
-                Бесплатные курсы можно начать сразу после регистрации.
+                Доступ к выбранному курсу откроет администратор после подтверждения оплаты.
               </p>
             </div>
             <div className="rounded-2xl border border-line bg-gradient-to-b from-raised to-surface p-5 shadow-card ring-inset-hair sm:p-6">

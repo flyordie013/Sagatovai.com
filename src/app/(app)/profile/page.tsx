@@ -7,7 +7,6 @@ import {
   ArrowRight,
   Award,
   Lock,
-  Send,
   LogOut,
   KeyRound,
 } from "lucide-react";
@@ -84,9 +83,7 @@ export default async function ProfilePage() {
       {/* Статистика */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard icon={BookOpen} label="Курсов" value={stats.courses} />
-        {/* Lifetime total across ALL lessons (incl. free previews of unbought
-            courses) — labelled "всего" so it doesn't clash with the dashboard's
-            per-course "Пройдено уроков" X/Y fraction. */}
+        {/* Lifetime total across every course ever granted to this account. */}
         <StatCard
           icon={GraduationCap}
           label="Пройдено всего"
@@ -209,33 +206,6 @@ export default async function ProfilePage() {
             </div>
           </div>
           <PasswordForm />
-        </Card>
-
-        <Card className="relative overflow-hidden bg-gradient-to-br from-raised to-surface p-6">
-          <div className="pointer-events-none absolute -right-10 -top-12 size-36 rounded-full bg-gold/10 blur-2xl" />
-          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="grid size-11 shrink-0 place-items-center rounded-xl border border-gold/30 bg-gold/10 text-gold shadow-glow">
-                <Send className="size-5" strokeWidth={1.8} />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-display font-bold">AI-Наставник в Telegram</h3>
-                  <Badge variant="neutral">Скоро</Badge>
-                </div>
-                <p className="mt-0.5 text-sm text-muted">
-                  Подключите бота, чтобы учиться и получать разборы прямо в мессенджере.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              disabled
-              className="inline-flex shrink-0 cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-line-strong bg-raised px-4 py-2.5 text-sm font-semibold text-muted opacity-70"
-            >
-              Подключить
-            </button>
-          </div>
         </Card>
 
         <form action={logout}>

@@ -1,8 +1,6 @@
-import { AlertTriangle, Bot, Scale, Undo2, Wallet, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Scale, Undo2, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { isEmailLive } from "@/lib/email";
-import { isMentorLive } from "@/lib/mentor-ai";
-import { isPaymentConfigured } from "@/lib/payment";
 import { isLegalConfigured, isRefundConfigured } from "@/lib/legal";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -11,8 +9,7 @@ import { cn } from "@/lib/utils";
  * "What is not actually working" banners for the owner.
  *
  * Everything listed here degrades SILENTLY: mail is only written to the server
- * log, the mentor answers with a canned reply, the checkout screen never
- * appears, /offer and /refund answer 404. From the outside the site looks fine,
+ * log while /offer and /refund answer 404. From the outside the site looks fine,
  * so a half-configured deploy can go unnoticed for weeks — and the owner would
  * never learn that half the platform is switched off. Nothing is rendered once
  * everything is configured.
@@ -50,28 +47,9 @@ function collectIssues(): Issue[] {
         <>
           Студент, забывший пароль, не получит ссылку восстановления, а о выдаче доступа
           к курсу узнает, только если сам зайдёт в кабинет. Вы не получите и письмо
-          о новой заявке. Заполните <Env>RESEND_API_KEY</Env> и <Env>EMAIL_FROM</Env> —
-          письма пойдут сразу. Пока их можно увидеть только в логах сервера.
-        </>
-      ),
-    });
-  }
-
-  if (!isPaymentConfigured) {
-    issues.push({
-      key: "payment",
-      icon: Wallet,
-      tone: "danger",
-      title: "Реквизиты оплаты не заданы — студенту негде увидеть, куда платить",
-      body: (
-        <>
-          После заявки на платный курс он видит только «менеджер свяжется с вами»: ни
-          номера для перевода, ни кнопки «Отправить чек в WhatsApp». Каждую оплату
-          придётся доводить вручную, а часть людей просто уйдёт. Заполните{" "}
-          <Env>KASPI_NUMBER</Env> — телефон или номер карты, достаточно одного, — либо{" "}
-          <Env>KASPI_LINK</Env> (ссылка, открывающая Kaspi). По желанию:{" "}
-          <Env>KASPI_RECIPIENT</Env> (имя получателя, как его увидит плательщик) и{" "}
-          <Env>PAYMENT_NOTE</Env> (что указать в комментарии к переводу).
+          о новой заявке. Заполните <Env>SMTP_HOST</Env>, <Env>SMTP_USER</Env>,{" "}
+          <Env>SMTP_PASSWORD</Env> и <Env>EMAIL_FROM</Env> — письма пойдут сразу.
+          Пока их можно увидеть только в логах сервера.
         </>
       ),
     });
@@ -109,22 +87,6 @@ function collectIssues(): Issue[] {
           <Env>LEGAL_REFUND_PROGRESS_PERCENT</Env> (сколько процентов курса допустимо
           пройти) и <Env>LEGAL_REFUND_PAYOUT_DAYS</Env> (за сколько дней возвращаете
           деньги).
-        </>
-      ),
-    });
-  }
-
-  if (!isMentorLive()) {
-    issues.push({
-      key: "mentor",
-      icon: Bot,
-      tone: "warn",
-      title: "AI-наставник работает в демо-режиме",
-      body: (
-        <>
-          Студенты видят заготовленные ответы, а не живой AI. Добавьте{" "}
-          <Env>GROQ_API_KEY</Env> (бесплатно), <Env>OPENAI_API_KEY</Env> или{" "}
-          <Env>ANTHROPIC_API_KEY</Env> — и наставник заработает по-настоящему.
         </>
       ),
     });

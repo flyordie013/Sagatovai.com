@@ -30,7 +30,6 @@ export default function robots(): MetadataRoute.Robots {
         // "/course" would also close the public catalogue at /courses.
         "/course/",
         "/lesson",
-        "/mentor",
         "/achievements",
         "/leaderboard",
         "/store",

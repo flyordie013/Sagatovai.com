@@ -1,4 +1,4 @@
-/** Fallback for a lesson: breadcrumb, title, 16:9 player, mentor strip. */
+/** Fallback for a lesson: breadcrumb, title, player and materials. */
 export default function LessonLoading() {
   return (
     <div
@@ -24,15 +24,6 @@ export default function LessonLoading() {
         <div className="h-4 w-5/6 rounded bg-white/5" />
       </div>
 
-      {/* mentor strip */}
-      <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 shadow-card ring-inset-hair">
-        <div className="size-10 shrink-0 rounded-xl bg-white/5" />
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="h-4 w-56 rounded bg-white/5" />
-          <div className="h-3 w-40 rounded bg-white/5" />
-        </div>
-        <div className="h-9 w-24 shrink-0 rounded-xl bg-white/5" />
-      </div>
     </div>
   );
 }

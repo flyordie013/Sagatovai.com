@@ -67,7 +67,7 @@ export default async function AdminUsersPage({
         )}
       </form>
 
-      {/* Create an account manually — e.g. right after a Kaspi/WhatsApp payment. */}
+      {/* Create an account manually after a verified payment. */}
       <Card className="p-5">
         <div className="mb-3 flex items-center gap-2">
           <UserPlus className="size-4 text-gold" />

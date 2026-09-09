@@ -10,21 +10,18 @@ import {
   Star,
   Clock,
   PlayCircle,
-  MessageCircle,
-  Unlock,
   type LucideIcon,
 } from "lucide-react";
 import type { CourseIcon } from "@/types";
 import { getPublicCourse } from "@/data/public";
 import { Badge } from "@/components/ui/badge";
-import { SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
 import { pluralize } from "@/lib/utils";
 import { LeadForm } from "../../lead-form";
 
 const ICONS: Record<CourseIcon, LucideIcon> = { sparkles: Sparkles, bot: Bot, code: Code2 };
 
 /**
- * Course links travel by forwarding (WhatsApp/Telegram), so the preview has to
+ * Course links are often forwarded, so the preview has to
  * be about THIS course. Metadata is merged shallowly per key: declaring
  * `openGraph` here replaces the root layout's object whole, which is why the
  * card fields are restated. The preview image is the one exception — it comes
@@ -75,12 +72,6 @@ export default async function PublicCoursePage({
   if (!course) notFound();
 
   const Icon = ICONS[course.icon] ?? Sparkles;
-  // A visitor who does not want to wait for a callback: WhatsApp opens with the
-  // course already named, so the manager knows what the question is about.
-  const askUrl = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent(
-    `Здравствуйте! Хочу задать вопрос по курсу «${course.title}»`,
-  )}`;
-
   return (
     <div className="mx-auto max-w-[1120px] px-4 py-10 sm:px-6 sm:py-14">
       <Link
@@ -127,16 +118,6 @@ export default async function PublicCoursePage({
                 {course.rating}
               </span>
             )}
-            {/* A paid course with previews is the cheapest thing to try, so it
-                is stated above the fold. On a free course the whole thing is
-                already free — the counter would only understate it. */}
-            {course.price > 0 && course.freeLessonCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 rounded-lg border border-teal/30 bg-teal/10 px-2 py-1 text-xs font-semibold text-teal">
-                <Unlock className="size-3.5" />
-                {course.freeLessonCount}{" "}
-                {pluralize(course.freeLessonCount, ["урок", "урока", "уроков"])} бесплатно
-              </span>
-            )}
           </div>
 
           {/* On phones the form lands under the whole curriculum — a screen and
@@ -152,13 +133,6 @@ export default async function PublicCoursePage({
           {/* ---- curriculum ---- */}
           <section className="mt-10">
             <h2 className="font-display text-xl font-bold">Программа курса</h2>
-            {course.freeLessonCount > 0 && (
-              <p className="mt-2 text-sm text-muted">
-                Уроки с пометкой{" "}
-                <span className="font-semibold text-teal">«Бесплатно»</span> можно
-                посмотреть без оплаты — достаточно зарегистрироваться.
-              </p>
-            )}
             <div className="mt-4 space-y-3">
               {course.modules.length === 0 && (
                 <p className="text-sm text-muted">Программа скоро появится.</p>
@@ -179,15 +153,8 @@ export default async function PublicCoursePage({
                   <ul className="mt-3 space-y-1.5">
                     {m.lessons.map((l) => (
                       <li key={l.id} className="flex items-start gap-2.5 text-sm text-muted">
-                        <PlayCircle
-                          className={`mt-0.5 size-4 shrink-0 ${l.isFree ? "text-teal" : "text-faint"}`}
-                        />
+                        <PlayCircle className="mt-0.5 size-4 shrink-0 text-faint" />
                         <span className="min-w-0 flex-1">{l.title}</span>
-                        {l.isFree && (
-                          <span className="mt-0.5 shrink-0 rounded-md border border-teal/30 bg-teal/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal">
-                            Бесплатно
-                          </span>
-                        )}
                       </li>
                     ))}
                   </ul>
@@ -202,15 +169,7 @@ export default async function PublicCoursePage({
           <div className="sticky bottom-0 z-20 -mx-4 mt-10 flex items-center gap-3 border-t border-line bg-ink/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:hidden">
             <div className="min-w-0">
               <p className="truncate font-display text-sm font-bold">{course.title}</p>
-              {/* Paid courses are sold through a manager — no price tag here,
-                  same as on the catalogue card. */}
-              <p className="text-xs font-semibold">
-                {course.price > 0 ? (
-                  <span className="text-gold">По заявке</span>
-                ) : (
-                  <span className="text-teal">Бесплатно</span>
-                )}
-              </p>
+              <p className="text-xs font-semibold text-gold">По заявке</p>
             </div>
             <Link
               href="#zayavka"
@@ -225,31 +184,13 @@ export default async function PublicCoursePage({
         <aside id="zayavka" className="scroll-mt-20 lg:sticky lg:top-24">
           <div className="rounded-2xl border border-line bg-gradient-to-b from-raised to-surface p-5 shadow-card ring-inset-hair sm:p-6">
             <p className="font-display text-lg font-bold">
-              {course.price > 0 ? "Записаться на курс" : "Начать бесплатно"}
+              Записаться на курс
             </p>
             <p className="mt-1.5 mb-5 text-sm text-muted">
-              {course.price > 0
-                ? "Оставьте контакт — расскажем про программу, условия и откроем доступ."
-                : "Оставьте контакт — откроем доступ к курсу."}
+              Оставьте контакт. После подтверждения оплаты администратор откроет доступ к выбранному курсу.
             </p>
             <LeadForm courseId={course.id} courseTitle={course.title} />
 
-            {/* Waiting for a callback is the slowest way to get an answer — the
-                same question in WhatsApp costs one tap on a phone. */}
-            <div className="mt-4 border-t border-line pt-4">
-              <a
-                href={askUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-line-strong bg-raised px-4 py-3 text-sm font-semibold text-text transition-colors hover:bg-raised-2"
-              >
-                <MessageCircle className="size-4" />
-                Задать вопрос в WhatsApp
-              </a>
-              <p className="mt-2 text-center text-xs text-faint">
-                Ответим на вопросы о программе, доступе и оплате.
-              </p>
-            </div>
           </div>
         </aside>
       </div>

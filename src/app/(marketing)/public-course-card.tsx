@@ -9,7 +9,6 @@ import {
   ArrowRight,
   BookOpen,
   MessageCircle,
-  Unlock,
   type LucideIcon,
 } from "lucide-react";
 import type { CourseIcon } from "@/types";
@@ -56,26 +55,8 @@ export function PublicCourseCard({ course }: { course: PublicCourse }) {
         )}
       </div>
 
-      {/* "Можно попробовать" is the strongest thing a paid card can say. A free
-          course says «Бесплатно» in the footer already — no counter there. */}
-      {course.price > 0 && course.freeLessonCount > 0 && (
-        <p className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-lg border border-teal/30 bg-teal/10 px-2 py-1 text-xs font-semibold text-teal">
-          <Unlock className="size-3.5" />
-          {course.freeLessonCount}{" "}
-          {pluralize(course.freeLessonCount, ["урок", "урока", "уроков"])} бесплатно
-        </p>
-      )}
-
       <div className="mt-5 flex items-center justify-between border-t border-line pt-4">
-        {/* Paid courses are sold through a manager, so the card shows a CTA
-            rather than a price tag. Free courses state it plainly. */}
-        <span className="font-display text-sm font-bold">
-          {course.price > 0 ? (
-            <span className="text-gold">По заявке</span>
-          ) : (
-            <span className="text-teal">Бесплатно</span>
-          )}
-        </span>
+        <span className="font-display text-sm font-bold text-gold">По заявке</span>
         <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted transition-colors group-hover:text-gold">
           Подробнее
           <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />

@@ -35,8 +35,8 @@ async function purgeVideos(keys: (string | null)[]): Promise<void> {
   await Promise.all(keys.filter((k): k is string => Boolean(k)).map((k) => deleteVideo(k)));
 }
 
-type PaymentMethod = "manual" | "whatsapp" | "kaspi" | "card";
-const PAYMENT_METHODS: readonly PaymentMethod[] = ["manual", "whatsapp", "kaspi", "card"];
+type PaymentMethod = "manual" | "kaspi" | "card";
+const PAYMENT_METHODS: readonly PaymentMethod[] = ["manual", "kaspi", "card"];
 
 type Icon = "sparkles" | "bot" | "code";
 
@@ -138,9 +138,7 @@ export async function createCourse(formData: FormData): Promise<void> {
       weeks: int(formData, "weeks"),
       price: int(formData, "price"),
       flagship: bool(formData, "flagship"),
-      // A brand-new course is always a DRAFT: it has no lessons yet, and a
-      // published free course would immediately hand every new student a
-      // permanent enrollment to an empty shell (see provisionNewStudent).
+      // A brand-new course is always a draft until its structure is ready.
       isPublished: false,
       orderIndex: await nextCourseOrderIndex(),
     })
@@ -417,7 +415,6 @@ export async function updateLesson(formData: FormData): Promise<void> {
       content: str(formData, "content"),
       ...(badVideoUrl ? {} : { videoUrl }),
       videoDurationSec: int(formData, "videoDurationSec"),
-      isFree: bool(formData, "isFree"),
     })
     .where(eq(lessons.id, id));
 
@@ -753,8 +750,8 @@ async function countSuperadmins(): Promise<number> {
 }
 
 /**
- * Creates an account on behalf of a customer (e.g. after a Kaspi/WhatsApp
- * payment). The owner sets the initial password and relays it to the student.
+ * Creates an account on behalf of a customer after payment. The owner sets the
+ * initial password and relays it to the student.
  */
 export async function createUser(formData: FormData): Promise<void> {
   const session = await requireStaff();
@@ -864,8 +861,8 @@ export async function updateUser(formData: FormData): Promise<void> {
 
   await db.update(profiles).set({ fullName, email, role }).where(eq(profiles.id, userId));
 
-  // Someone turned INTO a student needs the baseline signup gives everyone else
-  // (free courses + active missions), otherwise their cabinet stays empty.
+  // Someone turned into a student receives active missions, but no course
+  // access — courses are granted separately after payment verification.
   if (role === "student" && target.role !== "student") await provisionNewStudent(db, userId);
 
   revalidatePath("/admin");
@@ -943,9 +940,7 @@ export async function revokeAccess(formData: FormData): Promise<void> {
   if (!userId || !courseId) return;
 
   await db.transaction(async (tx) => {
-    // Set the enrollment to "locked" rather than DELETING it — deleting a row
-    // for a FREE published course would fall back to the "free → full" rule and
-    // silently re-grant access. An explicit "locked" enrollment overrides that.
+    // Keep an explicit locked row so revocation remains visible and auditable.
     await tx
       .insert(enrollments)
       .values({ userId, courseId, accessType: "locked" })
@@ -979,8 +974,8 @@ export async function grantAccess(formData: FormData): Promise<void> {
   const method: PaymentMethod = PAYMENT_METHODS.includes(rawMethod) ? rawMethod : "manual";
   if (!userId || !courseId) return;
 
-  // Resolve the amount: clamp to >= 0, and when left at 0 fall back to the
-  // course's list price so a manual grant still books realistic revenue.
+  // Resolve the amount: a blank uses the list price; an explicit 0 records a
+  // complimentary admin grant without inflating revenue.
   const [course] = await db
     .select({ price: courses.price, title: courses.title, slug: courses.slug })
     .from(courses)
@@ -1002,53 +997,57 @@ export async function grantAccess(formData: FormData): Promise<void> {
     .limit(1);
   const opensAccess = prior?.accessType !== "full";
 
-  // grant full access (idempotent)
-  await db
-    .insert(enrollments)
-    .values({ userId, courseId, accessType: "full" })
-    .onConflictDoUpdate({
-      target: [enrollments.userId, enrollments.courseId],
-      set: { accessType: "full" },
-    });
+  // Access and its paid ledger entry are one transaction: either both are
+  // recorded, or neither is. This prevents a DB error from opening a course
+  // without the corresponding verified-payment record.
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(enrollments)
+      .values({ userId, courseId, accessType: "full" })
+      .onConflictDoUpdate({
+        target: [enrollments.userId, enrollments.courseId],
+        set: { accessType: "full" },
+      });
 
-  // Convert an open request into a paid payment. If there's no open request,
-  // update an already-paid payment in place (idempotent re-grant) rather than
-  // inserting a duplicate that would double-count revenue.
-  const now = new Date();
-  const converted = await db
-    .update(payments)
-    .set({ status: "paid", amount, method, updatedAt: now })
-    .where(
-      and(
-        eq(payments.userId, userId),
-        eq(payments.courseId, courseId),
-        eq(payments.status, "requested"),
-      ),
-    )
-    .returning({ id: payments.id });
-
-  if (converted.length === 0) {
-    const [existingPaid] = await db
-      .select({ id: payments.id })
-      .from(payments)
+    // Convert an open request into a paid payment. If there's no open request,
+    // update an already-paid payment in place (idempotent re-grant) rather than
+    // inserting a duplicate that would double-count revenue.
+    const now = new Date();
+    const converted = await tx
+      .update(payments)
+      .set({ status: "paid", amount, method, updatedAt: now })
       .where(
         and(
           eq(payments.userId, userId),
           eq(payments.courseId, courseId),
-          eq(payments.status, "paid"),
+          eq(payments.status, "requested"),
         ),
       )
-      .limit(1);
+      .returning({ id: payments.id });
 
-    if (existingPaid) {
-      await db
-        .update(payments)
-        .set({ amount, method, updatedAt: now })
-        .where(eq(payments.id, existingPaid.id));
-    } else {
-      await db.insert(payments).values({ userId, courseId, amount, status: "paid", method });
+    if (converted.length === 0) {
+      const [existingPaid] = await tx
+        .select({ id: payments.id })
+        .from(payments)
+        .where(
+          and(
+            eq(payments.userId, userId),
+            eq(payments.courseId, courseId),
+            eq(payments.status, "paid"),
+          ),
+        )
+        .limit(1);
+
+      if (existingPaid) {
+        await tx
+          .update(payments)
+          .set({ amount, method, updatedAt: now })
+          .where(eq(payments.id, existingPaid.id));
+      } else {
+        await tx.insert(payments).values({ userId, courseId, amount, status: "paid", method });
+      }
     }
-  }
+  });
 
   revalidatePath("/admin");
   revalidatePath("/admin/requests");

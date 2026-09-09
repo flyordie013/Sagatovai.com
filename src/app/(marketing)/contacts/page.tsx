@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Mail, MessageCircle } from "lucide-react";
-import { SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, SUPPORT_WHATSAPP_URL } from "@/lib/contacts";
+import { Mail } from "lucide-react";
+import { SUPPORT_EMAIL } from "@/lib/contacts";
 import { SELLER, isLegalConfigured, isRefundConfigured } from "@/lib/legal";
 
 export const metadata: Metadata = {
   title: "Контакты",
-  description: "Как связаться с OQU: WhatsApp, email и сведения о продавце.",
+  description: "Как связаться с OQU: email и сведения о продавце.",
   alternates: { canonical: "/contacts" },
 };
 
@@ -23,25 +23,7 @@ export default function ContactsPage() {
       <div className="mt-8 space-y-6 text-sm leading-relaxed text-muted">
         <section className="space-y-3">
           <h2 className="font-display text-lg font-bold text-text">Как с нами связаться</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <a
-              href={SUPPORT_WHATSAPP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-start gap-3 rounded-2xl border border-line bg-surface p-4 shadow-card ring-inset-hair transition-colors hover:border-line-strong"
-            >
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-gold/25 bg-gold/10 text-gold">
-                <MessageCircle className="size-5" strokeWidth={1.8} />
-              </span>
-              <span className="min-w-0">
-                <span className="block font-display font-bold text-text">WhatsApp</span>
-                <span className="nums mt-0.5 block">{SUPPORT_PHONE_DISPLAY}</span>
-                <span className="mt-1 block text-xs text-faint">
-                  Самый быстрый способ — пишите в любое время.
-                </span>
-              </span>
-            </a>
-
+          <div className="grid gap-3 sm:max-w-md">
             <a
               href={`mailto:${SUPPORT_EMAIL}`}
               className="flex items-start gap-3 rounded-2xl border border-line bg-surface p-4 shadow-card ring-inset-hair transition-colors hover:border-line-strong"
@@ -53,7 +35,7 @@ export default function ContactsPage() {
                 <span className="block font-display font-bold text-text">Email</span>
                 <span className="mt-0.5 block break-words">{SUPPORT_EMAIL}</span>
                 <span className="mt-1 block text-xs text-faint">
-                  Для заявлений, документов и вложений.
+                  Для заявок, вопросов, документов и вложений.
                 </span>
               </span>
             </a>
