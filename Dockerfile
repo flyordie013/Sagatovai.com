@@ -41,6 +41,7 @@ COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 # Migrations are read from disk at boot (self-migrate on hosted Postgres).
 COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/scripts/http-timeouts.mjs ./http-timeouts.mjs
 
 # Uploaded videos live here on a persistent volume (see docker-compose).
 RUN mkdir -p storage/videos && chown -R nextjs:nodejs storage
@@ -54,4 +55,4 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "server.js"]
+CMD ["node", "--import", "./http-timeouts.mjs", "server.js"]
