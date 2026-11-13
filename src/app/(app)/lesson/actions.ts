@@ -60,138 +60,142 @@ export async function completeLesson(lessonId: number): Promise<CompleteResult> 
   const db = await getDb();
   const now = new Date();
 
-  // 1) Atomically claim the completion. Ensure a row exists, then flip
-  //    completed false→true in a single UPDATE guarded by completed=false.
-  //    Only the request that wins the flip proceeds to award XP, so a
-  //    double-submit / race can never grant rewards twice.
-  await db
-    .insert(lessonProgress)
-    .values({ userId, lessonId })
-    .onConflictDoNothing({ target: [lessonProgress.userId, lessonProgress.lessonId] });
-  const claimed = await db
-    .update(lessonProgress)
-    .set({ completed: true, completedAt: now, updatedAt: now })
-    .where(
-      and(
-        eq(lessonProgress.userId, userId),
-        eq(lessonProgress.lessonId, lessonId),
-        eq(lessonProgress.completed, false),
-      ),
-    )
-    .returning({ id: lessonProgress.id });
-  if (claimed.length === 0)
-    return { ok: true, alreadyCompleted: true, xpEarned: 0, nextLessonId: info.nextLessonId };
+  // Serialize all rewards for one student, and commit completion + XP together.
+  const result = await db.transaction(async (tx): Promise<CompleteResult> => {
+    const [profile] = await tx.select().from(profiles).where(eq(profiles.id, userId)).for("update");
+    if (!profile) return { ok: false, error: "Профиль не найден" };
+    // 1) Atomically claim the completion. Ensure a row exists, then flip
+    //    completed false→true in a single UPDATE guarded by completed=false.
+    //    Only the request that wins the flip proceeds to award XP, so a
+    //    double-submit / race can never grant rewards twice.
+    await tx
+      .insert(lessonProgress)
+      .values({ userId, lessonId })
+      .onConflictDoNothing({ target: [lessonProgress.userId, lessonProgress.lessonId] });
+    const claimed = await tx
+      .update(lessonProgress)
+      .set({ completed: true, completedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(lessonProgress.userId, userId),
+          eq(lessonProgress.lessonId, lessonId),
+          eq(lessonProgress.completed, false),
+        ),
+      )
+      .returning({ id: lessonProgress.id });
+    if (claimed.length === 0)
+      return { ok: true, alreadyCompleted: true, xpEarned: 0, nextLessonId: info.nextLessonId };
 
-  const [profile] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-  if (!profile) return { ok: false, error: "Профиль не найден" };
 
-  let xpGain = XP_PER_LESSON;
+    let xpGain = XP_PER_LESSON;
 
-  // 2) advance active missions
-  const active = await db
-    .select({
-      id: userMissions.id,
-      current: userMissions.current,
-      target: missions.target,
-      reward: missions.xpReward,
-    })
-    .from(userMissions)
-    .innerJoin(missions, eq(userMissions.missionId, missions.id))
-    .where(
-      and(
-        eq(userMissions.userId, userId),
-        eq(userMissions.completed, false),
-        // A mission the owner switched off must stop paying out: the dashboard
-        // already hides it, so its reward would be XP from nowhere.
-        eq(missions.isActive, true),
-      ),
-    );
-
-  for (const m of active) {
-    const next = Math.min(m.current + 1, m.target);
-    const done = next >= m.target;
-    await db.update(userMissions).set({ current: next, completed: done }).where(eq(userMissions.id, m.id));
-    if (done) xpGain += m.reward;
-  }
-
-  // 3) unlock lesson-count achievements
-  const [{ c: totalCompleted }] = await db
-    .select({ c: sql<number>`count(*)::int` })
-    .from(lessonProgress)
-    .where(and(eq(lessonProgress.userId, userId), eq(lessonProgress.completed, true)));
-
-  const catalog = await db.select().from(achievements);
-  // Earned = a ledger row that actually carries `unlockedAt`. A row without it
-  // is progress only and must not count as unlocked, or the achievement would
-  // be shut out forever.
-  const ledger = await db
-    .select({
-      id: userAchievements.achievementId,
-      unlockedAt: userAchievements.unlockedAt,
-    })
-    .from(userAchievements)
-    .where(eq(userAchievements.userId, userId));
-  const earned = new Set(ledger.filter((r) => r.unlockedAt !== null).map((r) => r.id));
-
-  const newlyUnlocked: string[] = [];
-  for (const a of catalog) {
-    // Compared against the CURRENT completed count, not just the moment the
-    // target is crossed — an achievement the owner adds later is awarded to
-    // students who are already past it instead of staying locked forever.
-    if (earned.has(a.id) || a.target > totalCompleted) continue;
-    // Insert, or claim a row that exists but was never unlocked. `setWhere`
-    // keeps it race-safe: a concurrent request that already stamped
-    // `unlockedAt` updates nothing and gets no row back, so XP is paid once.
-    const ins = await db
-      .insert(userAchievements)
-      .values({ userId, achievementId: a.id, progress: a.target, unlockedAt: now })
-      .onConflictDoUpdate({
-        target: [userAchievements.userId, userAchievements.achievementId],
-        set: { progress: a.target, unlockedAt: now },
-        setWhere: isNull(userAchievements.unlockedAt),
+    // 2) advance active missions
+    const active = await tx
+      .select({
+        id: userMissions.id,
+        current: userMissions.current,
+        target: missions.target,
+        reward: missions.xpReward,
       })
-      .returning({ id: userAchievements.id });
-    if (ins.length === 0) continue; // another request already unlocked it
-    xpGain += a.xpReward;
-    newlyUnlocked.push(a.title);
-  }
+      .from(userMissions)
+      .innerJoin(missions, eq(userMissions.missionId, missions.id))
+      .where(
+        and(
+          eq(userMissions.userId, userId),
+          eq(userMissions.completed, false),
+          // A mission the owner switched off must stop paying out: the dashboard
+          // already hides it, so its reward would be XP from nowhere.
+          eq(missions.isActive, true),
+        ),
+      );
 
-  // 4) xp / level / rank
-  const newXp = profile.xp + xpGain;
-  const oldLevel = levelForXp(profile.xp);
-  const newLevel = levelForXp(newXp);
-  const newRank = rankForLevel(newLevel);
+    for (const m of active) {
+      const next = Math.min(m.current + 1, m.target);
+      const done = next >= m.target;
+      await tx.update(userMissions).set({ current: next, completed: done }).where(eq(userMissions.id, m.id));
+      if (done) xpGain += m.reward;
+    }
 
-  // 5) streak — days are counted in Asia/Almaty, never in the process timezone
-  //    (a UTC container would end the student's day at 05:00 local).
-  let streak = profile.currentStreak;
-  const diff = profile.lastActivityAt ? calendarDayDiff(profile.lastActivityAt, now) : null;
-  if (diff === null || diff >= 2) streak = 1;
-  else if (diff === 1) streak = profile.currentStreak + 1;
-  // diff === 0 → same day, unchanged
-  const longest = Math.max(profile.longestStreak, streak);
+    // 3) unlock lesson-count achievements
+    const [{ c: totalCompleted }] = await tx
+      .select({ c: sql<number>`count(*)::int` })
+      .from(lessonProgress)
+      .where(and(eq(lessonProgress.userId, userId), eq(lessonProgress.completed, true)));
 
-  await db
-    .update(profiles)
-    .set({
-      xp: newXp,
-      level: newLevel,
-      rank: newRank,
-      currentStreak: streak,
-      longestStreak: longest,
-      lastActivityAt: now,
-    })
-    .where(eq(profiles.id, userId));
+    const catalog = await tx.select().from(achievements);
+    // Earned = a ledger row that actually carries `unlockedAt`. A row without it
+    // is progress only and must not count as unlocked, or the achievement would
+    // be shut out forever.
+    const ledger = await tx
+      .select({
+        id: userAchievements.achievementId,
+        unlockedAt: userAchievements.unlockedAt,
+      })
+      .from(userAchievements)
+      .where(eq(userAchievements.userId, userId));
+    const earned = new Set(ledger.filter((r) => r.unlockedAt !== null).map((r) => r.id));
 
+    const newlyUnlocked: string[] = [];
+    for (const a of catalog) {
+      // Compared against the CURRENT completed count, not just the moment the
+      // target is crossed — an achievement the owner adds later is awarded to
+      // students who are already past it instead of staying locked forever.
+      if (earned.has(a.id) || a.target > totalCompleted) continue;
+      // Insert, or claim a row that exists but was never unlocked. `setWhere`
+      // keeps it race-safe: a concurrent request that already stamped
+      // `unlockedAt` updates nothing and gets no row back, so XP is paid once.
+      const ins = await tx
+        .insert(userAchievements)
+        .values({ userId, achievementId: a.id, progress: a.target, unlockedAt: now })
+        .onConflictDoUpdate({
+          target: [userAchievements.userId, userAchievements.achievementId],
+          set: { progress: a.target, unlockedAt: now },
+          setWhere: isNull(userAchievements.unlockedAt),
+        })
+        .returning({ id: userAchievements.id });
+      if (ins.length === 0) continue; // another request already unlocked it
+      xpGain += a.xpReward;
+      newlyUnlocked.push(a.title);
+    }
+
+    // 4) xp / level / rank
+    const newXp = profile.xp + xpGain;
+    const oldLevel = levelForXp(profile.xp);
+    const newLevel = levelForXp(newXp);
+    const newRank = rankForLevel(newLevel);
+
+    // 5) streak — days are counted in Asia/Almaty, never in the process timezone
+    //    (a UTC container would end the student's day at 05:00 local).
+    let streak = profile.currentStreak;
+    const diff = profile.lastActivityAt ? calendarDayDiff(profile.lastActivityAt, now) : null;
+    if (diff === null || diff >= 2) streak = 1;
+    else if (diff === 1) streak = profile.currentStreak + 1;
+    // diff === 0 → same day, unchanged
+    const longest = Math.max(profile.longestStreak, streak);
+
+    await tx
+      .update(profiles)
+      .set({
+        xp: newXp,
+        level: newLevel,
+        rank: newRank,
+        currentStreak: streak,
+        longestStreak: longest,
+        lastActivityAt: now,
+      })
+      .where(eq(profiles.id, userId));
+
+    return {
+      ok: true,
+      xpEarned: xpGain,
+      leveledUp: newLevel > oldLevel,
+      newLevel,
+      newRank,
+      achievements: newlyUnlocked,
+      nextLessonId: info.nextLessonId,
+    };
+  });
   revalidatePath("/dashboard");
-
-  return {
-    ok: true,
-    xpEarned: xpGain,
-    leveledUp: newLevel > oldLevel,
-    newLevel,
-    newRank,
-    achievements: newlyUnlocked,
-    nextLessonId: info.nextLessonId,
-  };
+  revalidatePath(`/lesson/${lessonId}`);
+  return result;
 }

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { randomBytes } from "node:crypto";
-import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   courses,
@@ -264,35 +264,25 @@ export async function deleteCourse(formData: FormData): Promise<void> {
   const id = int(formData, "courseId");
   if (!id) return;
 
-  // A course with SALES is ARCHIVED, not deleted — a hard delete would cascade
-  // its payments away and silently erase booked revenue. Archived courses are
-  // hidden from students but keep their sales records.
-  // Only `paid` rows count: an open or declined request never brought money in,
-  // so a single rejected request must not make the course undeletable forever.
-  const [{ n: paid }] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(payments)
-    .where(and(eq(payments.courseId, id), eq(payments.status, "paid")));
-
-  if (paid > 0) {
-    // Archived — keep the content (and its video files) intact.
-    await db
-      .update(courses)
-      .set({ isArchived: true, isPublished: false })
-      .where(eq(courses.id, id));
-  } else {
-    // Hard delete: collect the uploaded video files first, then cascade-remove
-    // modules/lessons/enrollments and free the files from disk.
-    const keys = await db
-      .select({ videoKey: lessons.videoKey })
-      .from(lessons)
-      .innerJoin(modules, eq(lessons.moduleId, modules.id))
-      .where(eq(modules.courseId, id));
-    const attachments = await db.select({ key: lessonMaterials.storageKey }).from(lessonMaterials)
+  const removed = await db.transaction(async (tx) => {
+    await tx.select({ id: courses.id }).from(courses).where(eq(courses.id, id)).for("update");
+    const [{ n: paid }] = await tx.select({ n: sql<number>`count(*)::int` }).from(payments)
+      .where(and(eq(payments.courseId, id), eq(payments.status, "paid")));
+    if (paid > 0) {
+      await tx.update(courses).set({ isArchived: true, isPublished: false }).where(eq(courses.id, id));
+      return null;
+    }
+    await tx.select({ id: modules.id }).from(modules).where(eq(modules.courseId, id)).orderBy(asc(modules.id)).for("update");
+    const keys = await tx.select({ videoKey: lessons.videoKey }).from(lessons)
+      .innerJoin(modules, eq(lessons.moduleId, modules.id)).where(eq(modules.courseId, id)).orderBy(asc(lessons.id)).for("update", { of: lessons });
+    const attachments = await tx.select({ key: lessonMaterials.storageKey }).from(lessonMaterials)
       .innerJoin(lessons, eq(lessonMaterials.lessonId, lessons.id)).innerJoin(modules, eq(lessons.moduleId, modules.id)).where(eq(modules.courseId, id));
-    await db.delete(courses).where(eq(courses.id, id));
-    await Promise.all(attachments.map(f => removeMaterial(f.key)));
-    await purgeVideos(keys.map((k) => k.videoKey));
+    await tx.delete(courses).where(eq(courses.id, id));
+    return { keys, attachments };
+  });
+  if (removed) {
+    await Promise.all(removed.attachments.map(f => removeMaterial(f.key)));
+    await purgeVideos(removed.keys.map(k => k.videoKey));
   }
 
   revalidatePath("/admin");
@@ -370,15 +360,16 @@ export async function deleteModule(formData: FormData): Promise<void> {
   const id = int(formData, "moduleId");
   const courseId = int(formData, "courseId");
   if (!id) return;
-  const keys = await db
-    .select({ videoKey: lessons.videoKey })
-    .from(lessons)
-    .where(eq(lessons.moduleId, id));
-  const attachments = await db.select({ key: lessonMaterials.storageKey }).from(lessonMaterials)
-    .innerJoin(lessons, eq(lessonMaterials.lessonId, lessons.id)).where(eq(lessons.moduleId, id));
-  await db.delete(modules).where(eq(modules.id, id)); // cascade removes lessons
-  await Promise.all(attachments.map(f => removeMaterial(f.key)));
-  await purgeVideos(keys.map((k) => k.videoKey));
+  const removed = await db.transaction(async (tx) => {
+    await tx.select({ id: modules.id }).from(modules).where(eq(modules.id, id)).for("update");
+    const keys = await tx.select({ videoKey: lessons.videoKey }).from(lessons).where(eq(lessons.moduleId, id)).orderBy(asc(lessons.id)).for("update");
+    const attachments = await tx.select({ key: lessonMaterials.storageKey }).from(lessonMaterials)
+      .innerJoin(lessons, eq(lessonMaterials.lessonId, lessons.id)).where(eq(lessons.moduleId, id));
+    await tx.delete(modules).where(eq(modules.id, id));
+    return { keys, attachments };
+  });
+  await Promise.all(removed.attachments.map(f => removeMaterial(f.key)));
+  await purgeVideos(removed.keys.map(k => k.videoKey));
   revalidateCourse(courseId);
 }
 
@@ -396,7 +387,10 @@ export async function deleteModule(formData: FormData): Promise<void> {
 const DIRECT_VIDEO_FILE = /\.(mp4|webm|ogv|ogg|mov|m4v|m3u8)$/i;
 
 function isPlayableVideoUrl(url: string): boolean {
-  return DIRECT_VIDEO_FILE.test(url.split(/[?#]/)[0]);
+  try {
+    const parsed = new URL(url);
+    return ["http:", "https:"].includes(parsed.protocol) && DIRECT_VIDEO_FILE.test(parsed.pathname);
+  } catch { return false; }
 }
 
 export async function createLesson(formData: FormData): Promise<void> {
@@ -475,15 +469,15 @@ export async function deleteLesson(formData: FormData): Promise<void> {
   const id = int(formData, "lessonId");
   const courseId = int(formData, "courseId");
   if (!id) return;
-  const [lesson] = await db
-    .select({ videoKey: lessons.videoKey })
-    .from(lessons)
-    .where(eq(lessons.id, id))
-    .limit(1);
-  const attachments = await db.select({ key: lessonMaterials.storageKey }).from(lessonMaterials).where(eq(lessonMaterials.lessonId, id));
-  await db.delete(lessons).where(eq(lessons.id, id));
-  await Promise.all(attachments.map(f => removeMaterial(f.key)));
-  await purgeVideos([lesson?.videoKey ?? null]); // free the uploaded file
+  const removed = await db.transaction(async (tx) => {
+    const keys = await tx.select({ videoKey: lessons.videoKey }).from(lessons).where(eq(lessons.id, id)).orderBy(asc(lessons.id)).for("update");
+    const attachments = await tx.select({ key: lessonMaterials.storageKey }).from(lessonMaterials)
+      .innerJoin(lessons, eq(lessonMaterials.lessonId, lessons.id)).where(eq(lessons.id, id));
+    await tx.delete(lessons).where(eq(lessons.id, id));
+    return { keys, attachments };
+  });
+  await Promise.all(removed.attachments.map(f => removeMaterial(f.key)));
+  await purgeVideos(removed.keys.map(k => k.videoKey));
   revalidateCourse(courseId);
 }
 
@@ -622,25 +616,19 @@ async function backfillAchievement(
     .having(sql`count(*) >= ${target}`);
 
   for (const { userId } of qualified) {
-    const ins = await db
-      .insert(userAchievements)
-      .values({ userId, achievementId, progress: target, unlockedAt: now })
-      .onConflictDoNothing({ target: [userAchievements.userId, userAchievements.achievementId] })
-      .returning({ id: userAchievements.id });
-    if (ins.length === 0 || xpReward <= 0) continue; // already unlocked / nothing to award
-
-    const [p] = await db
-      .select({ xp: profiles.xp })
-      .from(profiles)
-      .where(eq(profiles.id, userId))
-      .limit(1);
-    if (!p) continue;
-    const newXp = p.xp + xpReward;
-    const newLevel = levelForXp(newXp);
-    await db
-      .update(profiles)
-      .set({ xp: newXp, level: newLevel, rank: rankForLevel(newLevel) })
-      .where(eq(profiles.id, userId));
+    await db.transaction(async (tx) => {
+      const [p] = await tx.select({ xp: profiles.xp }).from(profiles).where(eq(profiles.id, userId)).for("update");
+      if (!p) return;
+      const ins = await tx.insert(userAchievements).values({ userId, achievementId, progress: target, unlockedAt: now })
+        .onConflictDoUpdate({
+          target: [userAchievements.userId, userAchievements.achievementId],
+          set: { progress: target, unlockedAt: now }, setWhere: isNull(userAchievements.unlockedAt),
+        }).returning({ id: userAchievements.id });
+      if (!ins.length || xpReward <= 0) return;
+      const newXp = p.xp + xpReward;
+      const level = levelForXp(newXp);
+      await tx.update(profiles).set({ xp: newXp, level, rank: rankForLevel(level) }).where(eq(profiles.id, userId));
+    });
   }
 }
 
@@ -1010,17 +998,12 @@ export async function grantAccess(formData: FormData): Promise<void> {
 
   // Only a genuinely NEW opening earns an email — a re-grant (correcting the
   // amount or the payment method) must not mail the student the same news again.
-  const [prior] = await db
-    .select({ accessType: enrollments.accessType })
-    .from(enrollments)
-    .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId)))
-    .limit(1);
-  const opensAccess = prior?.accessType !== "full";
-
-  // Access and its paid ledger entry are one transaction: either both are
-  // recorded, or neither is. This prevents a DB error from opening a course
-  // without the corresponding verified-payment record.
-  await db.transaction(async (tx) => {
+  const opensAccess = await db.transaction(async (tx) => {
+    const [currentCourse] = await tx.select({ id: courses.id }).from(courses).where(eq(courses.id, courseId)).for("update");
+    if (!currentCourse) throw new Error("Курс удалён. Обновите страницу.");
+    await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.id, userId)).for("update");
+    const [prior] = await tx.select({ accessType: enrollments.accessType }).from(enrollments)
+      .where(and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId)));
     await tx
       .insert(enrollments)
       .values({ userId, courseId, accessType: "full" })
@@ -1067,6 +1050,7 @@ export async function grantAccess(formData: FormData): Promise<void> {
         await tx.insert(payments).values({ userId, courseId, amount, status: "paid", method });
       }
     }
+    return prior?.accessType !== "full";
   });
 
   revalidatePath("/admin");

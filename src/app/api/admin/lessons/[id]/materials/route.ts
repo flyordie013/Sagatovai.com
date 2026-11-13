@@ -8,6 +8,7 @@ import { listLessonMaterials } from "@/data/materials";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 1800;
 type Context = { params: Promise<{ id: string }> };
 const bad = (error: string, status = 400) => Response.json({ error }, { status });
 

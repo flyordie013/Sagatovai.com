@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { lessons } from "@/db/schema";
-import { requireStaff } from "@/lib/session";
+import { apiAccess, positiveId } from "@/lib/api-access";
 import {
   putVideo,
   deleteVideo,
@@ -20,7 +20,7 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // Large uploads take a while; give the route room where the host honours it.
-export const maxDuration = 300;
+export const maxDuration = 1800;
 
 /** Nothing plausible for a lesson runs longer than this. */
 const MAX_DURATION_SEC = 12 * 60 * 60;
@@ -31,8 +31,7 @@ function bad(message: string, status = 400) {
 
 /**
  * Length the browser measured from the file before uploading. Untrusted input,
- * so anything that is not a sane whole number of seconds is dropped — the
- * lesson then keeps whatever the owner had set by hand.
+ * so anything that is not a sane whole number of seconds is dropped.
  */
 function parseDuration(raw: string | null): number | null {
   const sec = Number(raw);
@@ -44,11 +43,12 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  await requireStaff();
+  const auth = await apiAccess(request, true);
+  if (auth.response) return auth.response;
 
   const { id } = await params;
-  const lessonId = Number.parseInt(id, 10);
-  if (!Number.isInteger(lessonId)) return bad("Некорректный урок");
+  const lessonId = positiveId(id);
+  if (!lessonId) return bad("Некорректный урок");
 
   const mimeType = (request.headers.get("content-type") ?? "").split(";")[0].trim();
   if (!isAllowedVideoType(mimeType)) {
@@ -93,47 +93,48 @@ export async function POST(
 
   const durationSec = parseDuration(request.headers.get("x-video-duration"));
 
-  await db
-    .update(lessons)
-    .set({
-      videoKey: stored.key,
-      videoSizeBytes: stored.size,
-      videoMimeType: stored.mimeType,
-      videoUrl: null, // an upload replaces any external link
-      // Left untouched when the browser could not measure the file.
-      ...(durationSec === null ? {} : { videoDurationSec: durationSec }),
-    })
-    .where(eq(lessons.id, lessonId));
-
-  // Free the previous file only after the row points at the new one.
-  if (lesson.videoKey) await deleteVideo(lesson.videoKey);
+  let previousKey: string | null = null;
+  try {
+    await db.transaction(async (tx) => {
+      const [current] = await tx.select({ videoKey: lessons.videoKey }).from(lessons).where(eq(lessons.id, lessonId)).for("update");
+      if (!current) throw new Error("Lesson deleted during upload");
+      previousKey = current.videoKey;
+      await tx.update(lessons).set({
+        videoKey: stored.key, videoSizeBytes: stored.size, videoMimeType: stored.mimeType,
+        videoUrl: null, videoDurationSec: durationSec ?? 0,
+      }).where(eq(lessons.id, lessonId));
+    });
+  } catch (error) {
+    await deleteVideo(stored.key);
+    console.error("[video upload] attachment failed", error);
+    return bad("Не удалось прикрепить видео. Возможно, урок удалён. Обновите страницу.", 409);
+  }
+  // The row lock ensures a concurrent replacement retires the actual predecessor.
+  if (previousKey) await deleteVideo(previousKey);
 
   return Response.json({ ok: true, size: stored.size });
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  await requireStaff();
+  const auth = await apiAccess(request, true);
+  if (auth.response) return auth.response;
 
   const { id } = await params;
-  const lessonId = Number.parseInt(id, 10);
-  if (!Number.isInteger(lessonId)) return bad("Некорректный урок");
+  const lessonId = positiveId(id);
+  if (!lessonId) return bad("Некорректный урок");
 
   const db = await getDb();
-  const [lesson] = await db
-    .select({ videoKey: lessons.videoKey })
-    .from(lessons)
-    .where(eq(lessons.id, lessonId))
-    .limit(1);
-  if (!lesson) return bad("Урок не найден", 404);
-
-  await db
-    .update(lessons)
-    .set({ videoKey: null, videoSizeBytes: null, videoMimeType: null })
-    .where(eq(lessons.id, lessonId));
-  if (lesson.videoKey) await deleteVideo(lesson.videoKey);
+  const removed = await db.transaction(async (tx) => {
+    const [lesson] = await tx.select({ videoKey: lessons.videoKey }).from(lessons).where(eq(lessons.id, lessonId)).for("update");
+    if (!lesson) return null;
+    await tx.update(lessons).set({ videoKey: null, videoSizeBytes: null, videoMimeType: null, videoDurationSec: 0 }).where(eq(lessons.id, lessonId));
+    return lesson;
+  });
+  if (!removed) return bad("Урок не найден", 404);
+  if (removed.videoKey) await deleteVideo(removed.videoKey);
 
   return Response.json({ ok: true });
 }

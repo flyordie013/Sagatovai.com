@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, FileText, Loader2, Upload, X } from "lucide-react";
 import type { LessonMaterial } from "@/data/materials";
+import { useLeaveGuard } from "@/lib/use-leave-guard";
 import { MATERIAL_ACCEPT, formatFileSize } from "@/lib/material-policy";
 
 type UploadItem = { id: string; file: File; replace?: string; progress: number; status: "queued" | "uploading" | "done" | "error"; error?: string };
@@ -9,6 +10,7 @@ export function MaterialManager({ lessonId, lessonTitle, courseTitle }: { lesson
   const root = useRef<HTMLDivElement>(null);
   const xhr = useRef<XMLHttpRequest | null>(null);
   const lock = useRef(false);
+  const mounted = useRef(true);
   const [files, setFiles] = useState<LessonMaterial[]>([]);
   const [limit, setLimit] = useState(0);
   const [maxCount, setMaxCount] = useState(30);
@@ -17,25 +19,29 @@ export function MaterialManager({ lessonId, lessonTitle, courseTitle }: { lesson
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [armed, setArmed] = useState<string | null>(null);
+  useLeaveGuard(busy, "Загрузка или сохранение файлов ещё не завершены.");
   const endpoint = `/api/admin/lessons/${lessonId}/materials`;
   const load = useCallback(async () => {
     const r = await fetch(endpoint, { cache: "no-store" });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || "Не удалось загрузить список.");
+    if (!mounted.current) return;
     setFiles(data.materials); setLimit(data.maxBytes); setMaxCount(data.maxCount);
   }, [endpoint]);
   useEffect(() => {
+    mounted.current = true;
     const details = root.current?.closest("details");
     let loaded = false;
     const init = () => { if ((!details || details.open) && !loaded) { loaded = true; void load().catch((e) => { loaded = false; setError(e.message); }); } };
     init(); details?.addEventListener("toggle", init);
-    return () => { details?.removeEventListener("toggle", init); xhr.current?.abort(); };
+    return () => { mounted.current = false; details?.removeEventListener("toggle", init); xhr.current?.abort(); };
   }, [load]);
   function update(id: string, values: Partial<UploadItem>) { setQueue((q) => q.map((i) => i.id === id ? { ...i, ...values } : i)); }
   async function upload(items: UploadItem[]) {
     if (lock.current) return;
     lock.current = true; setBusy(true); setError(""); setMessage("");
     for (const item of items) {
+      if (!mounted.current) break;
       if (item.file.size > limit || item.file.size === 0) { update(item.id, { status: "error", error: `Выберите непустой файл до ${formatFileSize(limit)}.` }); continue; }
       update(item.id, { status: "uploading", progress: 0, error: undefined });
       try {
@@ -45,7 +51,7 @@ export function MaterialManager({ lessonId, lessonTitle, courseTitle }: { lesson
           req.setRequestHeader("Content-Type", "application/octet-stream");
           req.setRequestHeader("X-File-Name", encodeURIComponent(item.file.name));
           req.setRequestHeader("X-Upload-Id", item.id);
-          req.timeout = 300000;
+          req.timeout = 1800000;
           req.upload.onprogress = (e) => { if (e.lengthComputable) update(item.id, { progress: Math.round(e.loaded / e.total * 100) }); };
           req.onload = () => { if (req.status >= 200 && req.status < 300) resolve(); else { let reason = "Не удалось загрузить файл."; try { reason = JSON.parse(req.responseText).error || reason; } catch {} reject(new Error(reason)); } };
           req.onerror = () => reject(new Error("Нет соединения. Повторите загрузку."));
@@ -57,7 +63,7 @@ export function MaterialManager({ lessonId, lessonTitle, courseTitle }: { lesson
         await load();
       } catch (e) { update(item.id, { status: "error", error: e instanceof Error ? e.message : "Ошибка загрузки." }); }
     }
-    xhr.current = null; lock.current = false; setBusy(false);
+    xhr.current = null; lock.current = false; if (mounted.current) setBusy(false);
   }
   function choose(selected: FileList | File[] | null, replace?: string) {
     if (!selected || busy || !limit) return;
@@ -67,13 +73,15 @@ export function MaterialManager({ lessonId, lessonTitle, courseTitle }: { lesson
     setQueue((q) => [...q.filter((i) => i.status !== "done"), ...items]); void upload(items);
   }
   async function mutate(method: string, body: object) {
+    if (lock.current) return;
+    lock.current = true;
     setBusy(true); setError(""); setMessage("");
     try {
       const r = await fetch(endpoint, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await r.json(); if (!r.ok) throw new Error(data.error);
       await load(); setMessage("Изменения сохранены."); setArmed(null);
     } catch (e) { setError(e instanceof Error ? e.message : "Не удалось сохранить изменения."); }
-    finally { setBusy(false); }
+    finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
   return <div ref={root} className="my-5 space-y-4 border-y border-line py-5">
     <div><h4 className="font-semibold">Файлы для скачивания</h4><p className="mt-1 text-xs text-muted break-words">{courseTitle} → {lessonTitle}. Только для учеников с доступом к этому курсу.</p></div>

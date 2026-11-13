@@ -6,8 +6,8 @@ import { MATERIAL_TYPES, materialExtension, validMaterialSignature, cleanFilenam
 
 export const MATERIAL_DIR = path.join(process.cwd(), "storage", "materials");
 export function maxMaterialBytes(): number {
-  const mb = Number(process.env.MAX_MATERIAL_MB || 50);
-  return Math.max(1, Math.min(200, Number.isFinite(mb) ? mb : 50)) * 1024 ** 2;
+  const mb = Number(process.env.MAX_MATERIAL_MB || 200);
+  return Math.max(1, Math.min(200, Number.isFinite(mb) ? mb : 200)) * 1024 ** 2;
 }
 export function materialPath(key: string): string {
   if (!/^[0-9a-f-]{36}\.[a-z0-9]+$/.test(key)) throw new Error("Некорректный файл");

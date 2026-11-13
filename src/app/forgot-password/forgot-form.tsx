@@ -24,16 +24,16 @@ export function ForgotForm() {
   }
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form action={action} onReset={(e) => e.preventDefault()} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
         <span className="text-xs font-medium text-muted">Электронная почта</span>
         <input name="email" type="email" autoComplete="email" required placeholder="you@example.com" className={inputClass} />
       </label>
 
       {state.error && (
-        <p className="flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2.5 text-sm text-danger">
+        <p role="alert" className="flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2.5 text-sm text-danger">
           <AlertCircle className="size-4 shrink-0" />
-          {state.error}
+          <span>{state.error} <a href="/contacts" className="underline">Связаться с поддержкой</a></span>
         </p>
       )}
 

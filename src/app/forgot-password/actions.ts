@@ -10,7 +10,7 @@ import { profiles, passwordResets } from "@/db/schema";
 import { hashPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/client-ip";
-import { sendEmail, emailLayout, escapeHtml } from "@/lib/email";
+import { sendEmail, emailLayout, escapeHtml, isEmailLive } from "@/lib/email";
 import { MIN_PASSWORD } from "@/lib/auth-rules";
 
 export interface ForgotState {
@@ -50,6 +50,8 @@ export async function requestReset(
 ): Promise<ForgotState> {
   const email = (formData.get("email") ?? "").toString().trim().toLowerCase();
   if (!email || !email.includes("@")) return { error: "Введите корректный email" };
+
+  if (!isEmailLive()) return { error: "Восстановление по почте пока недоступно. Обратитесь в поддержку — администратор поможет восстановить доступ." };
 
   const h = await headers();
   if (!rateLimit(`forgot:${clientIp(h.get("x-forwarded-for"))}`, { max: 5, windowMs: 15 * 60_000 }).ok) {
@@ -137,14 +139,17 @@ export async function resetPassword(
   // Bump sessionVersion so any existing sessions are revoked (the user will log
   // in fresh below), then mark the token used.
   const passwordHash = await hashPassword(password);
-  await db
-    .update(profiles)
-    .set({ passwordHash, sessionVersion: sql`${profiles.sessionVersion} + 1` })
-    .where(eq(profiles.id, row.userId));
-  await db
-    .update(passwordResets)
-    .set({ usedAt: new Date() })
-    .where(eq(passwordResets.id, row.id));
+  const changed = await db.transaction(async (tx) => {
+    await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.id, row.userId)).for("update");
+    const claimed = await tx.update(passwordResets).set({ usedAt: new Date() })
+      .where(and(eq(passwordResets.id, row.id), isNull(passwordResets.usedAt), gt(passwordResets.expiresAt, new Date())))
+      .returning({ id: passwordResets.id });
+    if (!claimed.length) return false;
+    await tx.update(profiles).set({ passwordHash, sessionVersion: sql`${profiles.sessionVersion} + 1` }).where(eq(profiles.id, row.userId));
+    await tx.delete(passwordResets).where(eq(passwordResets.userId, row.userId));
+    return true;
+  });
+  if (!changed) return { error: "Ссылка уже использована или истекла. Запросите новую." };
 
   redirect("/login?reset=1"); // never returns
 }

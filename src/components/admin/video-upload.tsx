@@ -12,6 +12,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+import { useLeaveGuard } from "@/lib/use-leave-guard";
 import { cn } from "@/lib/utils";
 
 const ACCEPT = "video/mp4,video/webm,video/quicktime,video/x-matroska";
@@ -63,10 +64,11 @@ interface HeavyFileWarning {
 function buildHeavyFileWarning(file: File, durationSec: number | null): HeavyFileWarning | null {
   // Keep the original name so the command can be pasted as-is.
   const base = file.name.replace(/\.[^.]+$/, "") || "video";
+  const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
   const command =
-    `ffmpeg -i "${file.name}" -vf "scale='min(1920,iw)':-2" ` +
+    `ffmpeg -i ${quote("./" + file.name)} -vf "scale='min(1920,iw)':-2" ` +
     `-c:v libx264 -preset slow -crf 23 -c:a aac -b:a 128k ` +
-    `-movflags +faststart "${base}-web.mp4"`;
+    `-movflags +faststart ${quote("./" + base + "-web.mp4")}`;
 
   if (durationSec === null) {
     if (file.size < LARGE_FILE_BYTES) return null;
@@ -151,7 +153,7 @@ function CopyCommand({ command }: { command: string }) {
  * the file and emit a `durationchange` with the real value. Resolves `null` when
  * the length cannot be measured; the upload goes ahead either way.
  */
-function readDurationSec(file: File): Promise<number | null> {
+function readDurationSec(file: File, signal: AbortSignal): Promise<number | null> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const v = document.createElement("video");
@@ -161,13 +163,17 @@ function readDurationSec(file: File): Promise<number | null> {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal.removeEventListener("abort", abort);
       v.removeAttribute("src");
       v.load(); // aborts a still-running scan before the blob URL goes away
       URL.revokeObjectURL(url);
       resolve(sec !== null && sec > 0 ? Math.round(sec) : null);
     };
 
+    const abort = () => finish(null);
     const timer = setTimeout(() => finish(null), PROBE_TIMEOUT_MS);
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) { finish(null); return; }
 
     v.onloadedmetadata = () => {
       if (Number.isFinite(v.duration)) {
@@ -211,8 +217,29 @@ export function VideoUpload({
   const [warning, setWarning] = useState<HeavyFileWarning | null>(null);
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const request = useRef<XMLHttpRequest | null>(null);
+  const probeController = useRef<AbortController | null>(null);
+  const [retryFile, setRetryFile] = useState<File | null>(null);
+  const mounted = useRef(true);
+  const lock = useRef(false);
+  useLeaveGuard(busy, "Загрузка или удаление видео ещё не завершены.");
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; probeController.current?.abort(); request.current?.abort(); };
+  }, []);
+  function stop() {
+    probeController.current?.abort(); request.current?.abort();
+    lock.current = false; setBusy(false); setProgress(null); setError("Загрузка отменена. Можно повторить.");
+  }
 
   async function upload(file: File) {
+    if (lock.current) return;
+    lock.current = true;
+    setRetryFile(file);
+    const controller = new AbortController();
+    probeController.current = controller;
+    setArmed(false);
     setError(null);
     setWarning(null);
     setDone(false);
@@ -221,7 +248,8 @@ export function VideoUpload({
 
     // Probe before sending: the request body is the raw file stream, so the
     // measured length has to travel as a header.
-    const durationSec = await readDurationSec(file);
+    const durationSec = await readDurationSec(file, controller.signal);
+    if (!mounted.current || controller.signal.aborted) return;
 
     // Same measurements also tell us whether this is a raw export. Shown before
     // the first byte goes out, but deliberately not a blocker: the owner may
@@ -229,17 +257,23 @@ export function VideoUpload({
     setWarning(buildHeavyFileWarning(file, durationSec));
 
     const xhr = new XMLHttpRequest();
+    request.current = xhr;
+    xhr.timeout = 1800000;
+    const settle = () => { request.current = null; lock.current = false; if (mounted.current) { setBusy(false); setProgress(null); } };
     xhr.open("POST", `/api/admin/lessons/${lessonId}/video`);
-    xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    const mime = ({ mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", mkv: "video/x-matroska" } as Record<string, string>)[ext || ""];
+    xhr.setRequestHeader("Content-Type", file.type || mime || "application/octet-stream");
     if (durationSec) xhr.setRequestHeader("X-Video-Duration", String(durationSec));
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
     };
     xhr.onload = () => {
-      setBusy(false);
-      setProgress(null);
+      settle();
+      if (!mounted.current) return;
       if (xhr.status >= 200 && xhr.status < 300) {
+        setRetryFile(null);
         setDone(true);
         if (inputRef.current) inputRef.current.value = "";
         router.refresh();
@@ -253,26 +287,28 @@ export function VideoUpload({
         setError(msg);
       }
     };
-    xhr.onerror = () => {
-      setBusy(false);
-      setProgress(null);
-      setError("Обрыв соединения при загрузке");
-    };
+    xhr.onerror = () => { settle(); if (mounted.current) setError("Обрыв соединения. Повторите загрузку."); };
+    xhr.ontimeout = () => { settle(); if (mounted.current) setError("Загрузка заняла больше 30 минут. Проверьте соединение и повторите."); };
+    xhr.onabort = () => { settle(); if (mounted.current) setError("Загрузка отменена."); };
 
     xhr.send(file);
   }
 
   async function removeVideo() {
+    if (lock.current) return;
+    lock.current = true;
     setBusy(true);
     setError(null);
     try {
       const res = await fetch(`/api/admin/lessons/${lessonId}/video`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       setDone(false);
+      setArmed(false);
       router.refresh();
     } catch {
       setError("Не удалось удалить видео");
     } finally {
+      lock.current = false;
       setBusy(false);
     }
   }
@@ -307,7 +343,7 @@ export function VideoUpload({
           <button
             type="button"
             disabled={busy}
-            onClick={removeVideo}
+            onClick={() => setArmed(true)}
             className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-danger disabled:opacity-60"
           >
             <Trash2 className="size-3.5" />
@@ -316,6 +352,7 @@ export function VideoUpload({
         )}
       </div>
 
+      {armed && <div className="mt-3 flex flex-wrap items-center gap-2 text-sm"><span>Удалить видео из этого урока?</span><button type="button" disabled={busy} className="btn-secondary text-danger" onClick={() => void removeVideo()}>Подтвердить удаление</button><button type="button" disabled={busy} className="btn-secondary" onClick={() => setArmed(false)}>Отмена</button></div>}
       <input
         ref={inputRef}
         type="file"
@@ -323,6 +360,7 @@ export function VideoUpload({
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
+          e.target.value = "";
           if (file) void upload(file);
         }}
       />
@@ -330,7 +368,8 @@ export function VideoUpload({
       {progress !== null && (
         <div className="mt-3">
           <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="text-muted">Загрузка…</span>
+            <span className="text-muted">{progress === 100 ? "Сохраняем видео…" : "Загрузка…"}</span>
+            <button type="button" onClick={stop} className="min-h-11 px-2 underline">Отменить</button>
             <span className="nums font-medium text-text">{progress}%</span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
@@ -345,7 +384,7 @@ export function VideoUpload({
       {error && (
         <p className="mt-3 flex items-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
           <AlertCircle className="size-3.5 shrink-0" />
-          {error}
+          <span>{error} {retryFile && !busy && <button type="button" className="min-h-11 underline" onClick={() => void upload(retryFile)}>Повторить</button>}</span>
         </p>
       )}
 
@@ -357,8 +396,7 @@ export function VideoUpload({
           </p>
           <p className="mt-1.5 text-muted">{warning.impact}</p>
           <p className="mt-1.5 text-muted">
-            Видео уже загружается — останавливать не нужно. Но лучше сжать файл у себя на
-            компьютере и загрузить его заново{" "}
+            Для более быстрой загрузки можно сжать файл на компьютере{" "}
             {warning.estimate
               ? `— картинка почти не изменится, а вес упадёт примерно до ${warning.estimate}.`
               : "— картинка почти не изменится, а вес упадёт в несколько раз."}{" "}

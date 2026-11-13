@@ -1,5 +1,6 @@
 "use client";
 
+import { PasswordInput } from "@/components/ui/password-input";
 import { useActionState } from "react";
 import { ArrowRight, AlertCircle } from "lucide-react";
 import { resetPassword, type ResetState } from "../../forgot-password/actions";
@@ -13,13 +14,14 @@ export function ResetForm({ token }: { token: string }) {
   const [state, action, pending] = useActionState<ResetState, FormData>(boundAction, {});
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form action={action} onReset={(e) => e.preventDefault()} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
         <span className="text-xs font-medium text-muted">
           Новый пароль <span className="text-faint">— минимум {MIN_PASSWORD} символов</span>
         </span>
-        <input
+        <PasswordInput
           name="password"
+          aria-label="Новый пароль"
           type="password"
           autoComplete="new-password"
           required
@@ -31,8 +33,9 @@ export function ResetForm({ token }: { token: string }) {
 
       <label className="flex flex-col gap-1.5">
         <span className="text-xs font-medium text-muted">Повторите пароль</span>
-        <input
+        <PasswordInput
           name="confirm"
+          aria-label="Подтверждение"
           type="password"
           autoComplete="new-password"
           required
@@ -43,7 +46,7 @@ export function ResetForm({ token }: { token: string }) {
       </label>
 
       {state.error && (
-        <p className="flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2.5 text-sm text-danger">
+        <p role="alert" className="flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2.5 text-sm text-danger">
           <AlertCircle className="size-4 shrink-0" />
           {state.error}
         </p>

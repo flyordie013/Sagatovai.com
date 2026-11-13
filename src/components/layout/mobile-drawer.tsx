@@ -28,9 +28,19 @@ export function MobileDrawer({
       }
       if (e.key === "Escape") onClose();
     };
+    const desktop = matchMedia("(min-width: 1024px)");
+    const resize = () => { if (desktop.matches) onClose(); };
+    const containFocus = (e: FocusEvent) => {
+      if (e.target instanceof Node && !dialog.current?.contains(e.target)) dialog.current?.querySelector<HTMLElement>("button")?.focus();
+    };
+    resize();
+    desktop.addEventListener("change", resize);
+    document.addEventListener("focusin", containFocus);
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
     return () => {
+      desktop.removeEventListener("change", resize);
+      document.removeEventListener("focusin", containFocus);
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = previousOverflow;
       previous?.focus();
@@ -64,7 +74,7 @@ export function MobileDrawer({
         aria-modal="true"
         aria-label="Навигация"
         className={cn(
-          "absolute inset-y-0 left-0 w-[82%] max-w-[300px] border-r border-line bg-ink shadow-pop transition-transform duration-300 ease-[var(--ease-soft)]",
+          "absolute inset-y-0 left-0 w-[82%] max-w-[300px] overflow-y-auto overscroll-contain border-r border-line bg-ink shadow-pop transition-transform duration-300 ease-[var(--ease-soft)]",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >

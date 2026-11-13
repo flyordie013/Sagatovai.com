@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { useLeaveGuard } from "@/lib/use-leave-guard";
 
 /** Retain entered values on failed saves, and warn before leaving dirty forms. */
 export function SaveForm({ action, children, className }: {
@@ -8,24 +9,17 @@ export function SaveForm({ action, children, className }: {
 }) {
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState("");
-  useEffect(() => {
-    if (!dirty) return;
-    const unload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
-    const navigate = (e: MouseEvent) => {
-      const link = (e.target as Element).closest("a[href]");
-      if (link && link.getAttribute("target") !== "_blank" && !link.getAttribute("href")?.startsWith("#") &&
-        !window.confirm("Есть несохранённые изменения. Уйти со страницы?")) {
-        e.preventDefault(); e.stopPropagation();
-      }
-    };
-    window.addEventListener("beforeunload", unload);
-    document.addEventListener("click", navigate, true);
-    return () => { window.removeEventListener("beforeunload", unload); document.removeEventListener("click", navigate, true); };
-  }, [dirty]);
-  return <form className={className} onReset={event => event.preventDefault()} onChange={() => { setDirty(true); setStatus(""); }}
+  const revision = useRef(0);
+  useLeaveGuard(dirty, "Есть несохранённые изменения.");
+  return <form className={className} onReset={event => event.preventDefault()} onChange={() => { revision.current++; setDirty(true); setStatus(""); }}
     action={async (data) => {
+      const submitted = revision.current;
       setStatus("Сохраняем…");
-      try { await action(data); setDirty(false); setStatus("Изменения сохранены"); }
+      try {
+        await action(data);
+        const changed = revision.current !== submitted;
+        setDirty(changed); setStatus(changed ? "Сохранено. Новые изменения ещё не сохранены." : "Изменения сохранены");
+      }
       catch (error) {
         if (error && typeof error === "object" && "digest" in error && String(error.digest).startsWith("NEXT_REDIRECT")) throw error;
         setStatus("Не удалось сохранить. Проверьте соединение и повторите.");

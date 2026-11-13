@@ -68,8 +68,22 @@ async function main() {
     expect(response.headers.get("content-disposition")?.includes("filename*=UTF-8"), true, "unicode download name");
     expect(response.headers.get("cache-control"), "private, no-store", "downloads not cached");
     expect((await request(dl, u, "HEAD")).status, 200, "download preflight");
+    const etag = response.headers.get("etag")!;
+    for (const [range, expected] of [["bytes=0-4", bytes.subarray(0,5)], ["bytes=5-", bytes.subarray(5)], ["bytes=-5", bytes.subarray(-5)]] as const) {
+      const part = await request(dl, u, "GET", undefined, { Range: range, "If-Range": etag });
+      expect(part.status, 206, "partial download " + range);
+      expect(Buffer.from(await part.arrayBuffer()), expected, "partial bytes " + range);
+    }
+    for (const range of ["bytes=-", "bytes=-0", "bytes=9999-", "bytes=5-2", "bytes=0-1,4-5"]) {
+      expect((await request(dl, u, "GET", undefined, { Range: range })).status, 416, "invalid range " + range);
+    }
+    const stale = await request(dl, u, "GET", undefined, { Range: "bytes=2-", "If-Range": '"stale"' });
+    expect(stale.status, 200, "stale If-Range starts over");
+    expect(Buffer.from(await stale.arrayBuffer()), bytes, "stale If-Range full integrity");
+    expect((await request(dl, u, "HEAD", undefined, { Range: "bytes=2-3" })).headers.get("content-length"), String(bytes.length), "HEAD ignores Range");
     await sql`UPDATE enrollments SET access_type='locked' WHERE user_id=${student.id}`;
     expect((await request(dl, u)).status, 403, "revoked course access enforced immediately");
+    expect((await request(dl, u, "GET", undefined, { Range: "bytes=2-", "If-Range": etag })).status, 403, "revoked course cannot resume downloads");
     await sql`UPDATE enrollments SET access_type='full' WHERE user_id=${student.id}`;
     await sql`UPDATE profiles SET session_version=1 WHERE id=${student.id}`;
     expect((await request(dl, u)).status, 401, "revoked session denied");

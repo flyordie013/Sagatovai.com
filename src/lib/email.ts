@@ -6,7 +6,7 @@ import { createTransport } from "nodemailer";
  * providers is a one-file change.
  *
  * SMTP works with any provider: PS.KZ mail, Gmail Workspace, Mailgun, etc.
- * Without SMTP configuration messages are logged instead of silently lost;
+ * Without SMTP configuration delivery failures are logged without message bodies;
  * the admin dashboard also shows a configuration warning.
  *
  * Required: SMTP_HOST, SMTP_USER, SMTP_PASSWORD and EMAIL_FROM.
@@ -71,9 +71,8 @@ export async function sendEmail(msg: EmailMessage): Promise<{ ok: boolean }> {
   const configIssue = emailConfigIssue();
 
   if (configIssue) {
-    console.info(
-      `[email:disabled] ${configIssue}. To: ${msg.to}\nSubject: ${msg.subject}\n${msg.text ?? msg.html}`,
-    );
+    // Reset links and temporary passwords must never enter production logs.
+    console.info(`[email:disabled] ${configIssue}; сообщение не отправлено.`);
     return { ok: false };
   }
 

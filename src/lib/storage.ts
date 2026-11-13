@@ -1,6 +1,6 @@
 import "server-only";
-import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, stat, statfs, unlink } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdir, open, stat, statfs, unlink } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
@@ -167,6 +167,9 @@ export async function putVideo(
   writeFailed.catch(() => {}); // handled below; keep Node from flagging it
 
   try {
+    // Wait for creation before reading: an immediately aborted request must not
+    // unlink a not-yet-created path and leave an orphan when open finishes.
+    await Promise.race([once(out, "open"), writeFailed]);
     for (;;) {
       const { done, value } = await Promise.race([reader.read(), writeFailed]);
       if (done) break;
@@ -232,13 +235,18 @@ export async function readVideoRange(
 ): Promise<ReadableStream<Uint8Array> | null> {
   const file = resolveKey(key);
   if (!file) return null;
-  const nodeStream = createReadStream(file, { start, end });
-  return Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+  try {
+    // Hold the descriptor even if an administrator replaces the file mid-stream.
+    const handle = await open(file, "r");
+    return Readable.toWeb(handle.createReadStream({ start, end })) as ReadableStream<Uint8Array>;
+  } catch { return null; }
 }
 
 export async function deleteVideo(key: string): Promise<void> {
   const file = resolveKey(key);
   if (!file) return;
-  await unlink(file).catch(() => {});
+  await unlink(file).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") console.error("[storage] video cleanup failed", error.code);
+  });
 }
 

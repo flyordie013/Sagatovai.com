@@ -35,9 +35,11 @@ export function RequestButton({
           onClick={() =>
             start(async () => {
               setError(null);
-              const result = await createPurchaseRequest(courseId);
-              if (result.ok) setDone(true);
-              else setError(result.error ?? "Не удалось отправить заявку");
+              try {
+                const result = await createPurchaseRequest(courseId);
+                if (result.ok) setDone(true);
+                else setError(result.error ?? "Не удалось отправить заявку");
+              } catch { setError("Не удалось отправить заявку. Проверьте соединение и повторите."); }
             })
           }
           className="inline-flex items-center gap-2 rounded-xl bg-gold px-4 py-2.5 text-sm font-semibold text-gold-ink shadow-glow transition-colors hover:bg-gold-soft disabled:opacity-60"
@@ -46,7 +48,7 @@ export function RequestButton({
           {pending ? "Отправка…" : "Оставить заявку"}
         </button>
       )}
-      {error && <p className="text-xs text-danger">{error}</p>}
+      {error && <p role="alert" className="text-xs text-danger">{error}</p>}
     </div>
   );
 }

@@ -1,5 +1,7 @@
-import { requireUser, isStaff } from "@/lib/session";
+import { isStaff } from "@/lib/session";
 import { getLessonForStudent } from "@/data/course";
+import { apiAccess, positiveId } from "@/lib/api-access";
+import { byteRange } from "@/lib/byte-range";
 import { videoSize, readVideoRange } from "@/lib/storage";
 
 /**
@@ -62,11 +64,13 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { userId, role } = await requireUser();
+  const auth = await apiAccess(request);
+  if (auth.response) return auth.response;
+  const { userId, role } = auth.session;
 
   const { id } = await params;
-  const lessonId = Number.parseInt(id, 10);
-  if (!Number.isInteger(lessonId)) return new Response("Bad request", { status: 400 });
+  const lessonId = positiveId(id);
+  if (!lessonId) return new Response("Bad request", { status: 400 });
 
   const info = await getLessonForStudent(lessonId, userId, isStaff(role));
   if (!info || !info.lesson.videoKey) return new Response("Not found", { status: 404 });
@@ -97,6 +101,11 @@ export async function GET(
   const ifRange = request.headers.get("if-range");
   const range = ifRange !== null && ifRange.trim() !== etag ? null : request.headers.get("range");
 
+  if (request.method === "HEAD") return new Response(null, { headers: {
+    "Content-Type": contentType, "Content-Length": String(size),
+    "Accept-Ranges": "bytes", ETag: etag, "Cache-Control": CACHE_CONTROL,
+  } });
+
   // Full-file request (some browsers probe this first).
   if (!range) {
     const stream = await readVideoRange(key, 0, size - 1);
@@ -113,34 +122,11 @@ export async function GET(
     });
   }
 
-  const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
-  if (!match) {
-    return new Response("Range not satisfiable", {
-      status: 416,
-      headers: { "Content-Range": `bytes */${size}` },
-    });
-  }
-
-  const startRaw = match[1];
-  const endRaw = match[2];
-  let start = startRaw ? Number.parseInt(startRaw, 10) : 0;
-  let end = endRaw ? Number.parseInt(endRaw, 10) : Math.min(start + CHUNK - 1, size - 1);
-
-  // Suffix form: "bytes=-500" means the last 500 bytes.
-  if (!startRaw && endRaw) {
-    const suffix = Number.parseInt(endRaw, 10);
-    start = Math.max(0, size - suffix);
-    end = size - 1;
-  }
-
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) {
-    return new Response("Range not satisfiable", {
-      status: 416,
-      headers: { "Content-Range": `bytes */${size}` },
-    });
-  }
-  end = Math.min(end, size - 1);
-
+  const parsed = byteRange(range, size, CHUNK);
+  if (!parsed) return new Response(null, { status: 416, headers: {
+    "Content-Range": `bytes */${size}`, "Cache-Control": CACHE_CONTROL,
+  } });
+  const { start, end } = parsed;
   const stream = await readVideoRange(key, start, end);
   if (!stream) return new Response("Not found", { status: 404 });
 
@@ -156,3 +142,5 @@ export async function GET(
     },
   });
 }
+
+export const HEAD = GET;

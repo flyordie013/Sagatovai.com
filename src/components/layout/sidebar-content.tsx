@@ -37,7 +37,7 @@ export function SidebarContent({
   const pathname = usePathname();
 
   return (
-    <div className="flex h-full flex-col gap-7 p-4">
+    <div className="flex min-h-full flex-col gap-7 p-4">
       <div className="px-2 pt-2">
         <Brand />
       </div>

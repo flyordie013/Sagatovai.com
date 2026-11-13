@@ -10,7 +10,6 @@ import {
   Minimize,
   RotateCcw,
   RotateCw,
-  Gauge,
   PictureInPicture2,
   Loader2,
 } from "lucide-react";
@@ -106,7 +105,6 @@ export function VideoPlayer({
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [rate, setRate] = useState(1);
-  const [speedOpen, setSpeedOpen] = useState(false);
   const [full, setFull] = useState(false);
   // Resolved on the client only — the server has no way to know, and rendering
   // a button that does nothing is worse than rendering none.
@@ -327,8 +325,7 @@ export function VideoPlayer({
 
   function onKeyDown(e: React.KeyboardEvent) {
     // Don't hijack typing in any nested control.
-    const tag = (e.target as HTMLElement).tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA") return;
+    if ((e.target as HTMLElement).closest("button, input, textarea, select, a")) return;
 
     switch (e.key) {
       case " ":
@@ -395,7 +392,6 @@ export function VideoPlayer({
     if (!v) return;
     v.playbackRate = r;
     setRate(r);
-    setSpeedOpen(false);
     showUi();
   }
 
@@ -424,7 +420,7 @@ export function VideoPlayer({
         preload="metadata"
         // touch-manipulation: keeps iOS from reading the seek gesture below as
         // a double-tap-to-zoom.
-        className="aspect-video w-full touch-manipulation bg-black"
+        className={cn("w-full touch-manipulation bg-black object-contain", full && fsMode === "element" ? "h-full" : "aspect-video")}
         onPointerUp={onVideoPointerUp}
         onPlay={(e) => {
           // The student is watching now — never yank them back mid-playback.
@@ -485,7 +481,7 @@ export function VideoPlayer({
           type="button"
           onClick={togglePlay}
           aria-label="Воспроизвести"
-          className="absolute inset-0 grid place-items-center bg-black/30 transition-colors hover:bg-black/20"
+          className={cn("absolute inset-x-0 top-0 grid place-items-center bg-black/30 transition-colors hover:bg-black/20", full && fsMode === "element" ? "h-full" : "aspect-video")}
         >
           <span className="grid size-20 place-items-center rounded-full bg-gold text-gold-ink shadow-glow transition-transform hover:scale-105">
             <Play className="size-9 translate-x-0.5" fill="currentColor" />
@@ -496,8 +492,9 @@ export function VideoPlayer({
       {/* controls */}
       <div
         className={cn(
-          "absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-3 pb-2.5 pt-10 transition-opacity duration-200 sm:px-4",
-          uiVisible || !playing ? "opacity-100" : "pointer-events-none opacity-0",
+          "inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-3 pb-1 pt-2 transition-opacity duration-200 sm:px-4 sm:pt-6",
+          full ? "absolute" : "relative sm:absolute",
+          uiVisible || !playing ? "opacity-100" : full ? "pointer-events-none opacity-0" : "sm:pointer-events-none sm:opacity-0",
         )}
       >
         {/* seek bar */}
@@ -517,7 +514,7 @@ export function VideoPlayer({
           onPointerMove={(e) => {
             if (e.buttons === 1) pointerSeek(e);
           }}
-          className="relative mb-2 h-4 cursor-pointer touch-none"
+          className="relative h-6 cursor-pointer touch-none"
         >
           <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-white/20">
             <div className="h-full bg-white/25" style={{ width: `${bufPct}%` }} />
@@ -533,23 +530,30 @@ export function VideoPlayer({
           />
         </div>
 
-        <div className="flex items-center gap-0.5 text-white sm:gap-1">
-          <button type="button" onClick={togglePlay} aria-label={playing ? "Пауза" : "Играть"} className="grid size-9 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15">
+        <div className="nums flex items-center justify-between gap-3 text-xs text-white/90" aria-live="off">
+          <span className="font-mono">{fmt(current)} <span className="text-white/50">/ {fmt(total)}</span></span>
+          <select aria-label="Скорость воспроизведения" value={rate} onChange={(e) => applyRate(Number(e.target.value))}
+            className="h-11 w-[68px] shrink-0 rounded-lg border-0 bg-black/70 px-1 text-white focus-visible:outline-2 focus-visible:outline-gold">
+            {SPEEDS.map((speed) => <option key={speed} value={speed}>{speed}×</option>)}
+          </select>
+        </div>
+        <div className="flex items-center justify-between gap-1 text-white">
+          <button type="button" onClick={togglePlay} aria-label={playing ? "Пауза" : "Играть"} className="grid size-11 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15">
             {playing ? <Pause className="size-5" fill="currentColor" /> : <Play className="size-5" fill="currentColor" />}
           </button>
 
           {/* Shown on phones too — most students watch there, and a video with
               no way to rewind is unusable. Slightly tighter than on desktop so
               the row still fits a 375px screen. */}
-          <button type="button" onClick={() => seekBy(-SKIP)} aria-label="Назад 10 секунд" className="grid size-8 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15 sm:size-9">
+          <button type="button" onClick={() => seekBy(-SKIP)} aria-label="Назад 10 секунд" className="grid size-11 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15">
             <RotateCcw className="size-[18px]" />
           </button>
-          <button type="button" onClick={() => seekBy(SKIP)} aria-label="Вперёд 10 секунд" className="grid size-8 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15 sm:size-9">
+          <button type="button" onClick={() => seekBy(SKIP)} aria-label="Вперёд 10 секунд" className="grid size-11 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15">
             <RotateCw className="size-[18px]" />
           </button>
 
           <div className="group/vol flex shrink-0 items-center">
-            <button type="button" onClick={toggleMute} aria-label={muted ? "Включить звук" : "Выключить звук"} className="grid size-9 place-items-center rounded-lg transition-colors hover:bg-white/15">
+            <button type="button" onClick={toggleMute} aria-label={muted ? "Включить звук" : "Выключить звук"} className="grid size-11 place-items-center rounded-lg transition-colors hover:bg-white/15">
               {muted || volume === 0 ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
             </button>
             <input
@@ -560,51 +564,17 @@ export function VideoPlayer({
               value={muted ? 0 : volume}
               onChange={(e) => applyVolume(Number(e.target.value))}
               aria-label="Громкость"
-              className="ml-1 hidden w-0 accent-[var(--color-gold)] transition-all group-hover/vol:w-20 sm:block"
+              className="ml-1 hidden w-0 accent-[var(--color-gold)] transition-all group-hover/vol:w-20 group-focus-within/vol:w-20 2xl:block"
             />
           </div>
 
-          <span className="nums ml-1 min-w-0 truncate font-mono text-[11px] text-white/90 sm:ml-1.5 sm:text-xs">
-            {fmt(current)} <span className="text-white/50">/ {fmt(total)}</span>
-          </span>
-
-          <div className="relative ml-auto shrink-0">
-            <button
-              type="button"
-              onClick={() => setSpeedOpen((s) => !s)}
-              aria-label="Скорость воспроизведения"
-              aria-expanded={speedOpen}
-              className="flex h-9 items-center gap-1 rounded-lg px-1.5 text-xs font-semibold transition-colors hover:bg-white/15 sm:px-2"
-            >
-              <Gauge className="size-4" />
-              {rate}×
-            </button>
-            {speedOpen && (
-              <div className="absolute bottom-11 right-0 z-10 overflow-hidden rounded-xl border border-white/15 bg-ink/95 py-1 shadow-card backdrop-blur">
-                {SPEEDS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => applyRate(s)}
-                    className={cn(
-                      "block w-full px-4 py-1.5 text-left text-xs transition-colors hover:bg-white/10",
-                      s === rate ? "font-bold text-gold" : "text-white/85",
-                    )}
-                  >
-                    {s}×
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <button type="button" onClick={togglePip} aria-label="Мини-плеер" className="hidden size-9 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15 sm:grid">
+          <button type="button" onClick={togglePip} aria-label="Мини-плеер" className="hidden size-11 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15 2xl:grid">
             <PictureInPicture2 className="size-[18px]" />
           </button>
           {/* Hidden where no fullscreen API exists at all, rather than offering
               a button that silently does nothing. */}
           {fsMode !== "none" && (
-            <button type="button" onClick={toggleFullscreen} aria-label="На весь экран" className="grid size-9 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15">
+            <button type="button" onClick={toggleFullscreen} aria-label="На весь экран" className="grid size-11 shrink-0 place-items-center rounded-lg transition-colors hover:bg-white/15">
               {full ? <Minimize className="size-5" /> : <Maximize className="size-5" />}
             </button>
           )}
