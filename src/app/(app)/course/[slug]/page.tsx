@@ -52,11 +52,11 @@ export default async function CoursePage({
         className="inline-flex items-center gap-2 text-sm text-muted transition-colors hover:text-text"
       >
         <ArrowLeft className="size-4" />
-        К каталогу
+        К моим курсам
       </Link>
 
       {/* header */}
-      <Card className="bg-gradient-to-b from-raised to-surface p-5 sm:p-6">
+      <Card className="bg-surface p-5 sm:p-6">
         <div className="flex items-start gap-4">
           <div className="grid size-12 shrink-0 place-items-center rounded-xl border border-gold/25 bg-gold/10 text-gold">
             <Icon className="size-6" strokeWidth={1.8} />
@@ -77,7 +77,7 @@ export default async function CoursePage({
               <span className="nums font-medium text-text">{progress}%</span>
             </div>
             <ProgressBar value={progress} aria-label="Прогресс курса" />
-            {nextLessonId ? (
+            {nextLessonId && !courseCompleted ? (
               <Link
                 href={`/lesson/${nextLessonId}`}
                 className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gold px-4 py-2.5 text-sm font-semibold text-gold-ink shadow-glow transition-colors hover:bg-gold-soft"

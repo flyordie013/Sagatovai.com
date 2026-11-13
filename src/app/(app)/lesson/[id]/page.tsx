@@ -6,6 +6,8 @@ import { getLessonForStudent } from "@/data/course";
 import { LessonPlayer } from "@/components/lesson/lesson-player";
 import { Card } from "@/components/ui/card";
 import { RichText } from "@/components/ui/rich-text";
+import { listLessonMaterials } from "@/data/materials";
+import { MaterialList } from "@/components/lesson/material-list";
 
 export const metadata = { title: "Урок" };
 
@@ -26,9 +28,11 @@ export default async function LessonPage({
 
   // Students without admin-granted access return to the course request screen.
   if (!canView) redirect(`/course/${course.slug}`);
+  const files = await listLessonMaterials(lesson.id);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="mx-auto max-w-[1320px] lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-8">
+    <div className="min-w-0 space-y-5">
       <Link
         href={`/course/${course.slug}`}
         className="inline-flex items-center gap-2 text-sm text-muted transition-colors hover:text-text"
@@ -49,7 +53,9 @@ export default async function LessonPage({
         )}
       </div>
 
+      <Link href="#curriculum" className="btn-secondary lg:hidden">Все уроки курса ↓</Link>
       <LessonPlayer
+        key={lesson.id}
         lessonId={lesson.id}
         // Uploaded video streams through the access-checked route; an
         // external link (legacy) is used as-is.
@@ -57,22 +63,19 @@ export default async function LessonPage({
         initialWatchedPct={watchedPct}
         initialCompleted={completed}
         nextLessonId={nextLessonId}
-        resumeAt={
-          completed || !lesson.videoDurationSec
-            ? 0
-            : Math.floor((watchedPct / 100) * lesson.videoDurationSec)
-        }
+        resumeAt={data.lastPositionSec}
         // Fallback length for files that carry none in their header (screen
         // recordings report Infinity) — without it the watch % never moves.
         durationHint={lesson.videoDurationSec}
         courseSlug={course.slug}
       />
 
+      <MaterialList files={files} />
       {lesson.content && (
         <Card className="p-5">
           <p className="mb-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-faint">
             <FileText className="size-3.5" />
-            Материалы урока
+            Конспект урока
           </p>
           <RichText text={lesson.content} className="text-muted" />
         </Card>
@@ -86,7 +89,7 @@ export default async function LessonPage({
             className="inline-flex items-center gap-2 text-sm text-muted transition-colors hover:text-text"
           >
             <ArrowLeft className="size-4" />
-            Назад
+            Предыдущий урок
           </Link>
         ) : (
           <span />
@@ -96,13 +99,23 @@ export default async function LessonPage({
             href={`/lesson/${nextLessonId}`}
             className="inline-flex items-center gap-2 text-sm text-muted transition-colors hover:text-text"
           >
-            Далее
+            Следующий урок
             <ArrowRight className="size-4" />
           </Link>
         ) : (
           <span />
         )}
       </div>
+      </div>
+      <aside id="curriculum" className="scroll-mt-24 mt-6 rounded-2xl border border-line bg-surface lg:sticky lg:top-24 lg:mt-0">
+        <details open className="p-4">
+          <summary className="cursor-pointer font-semibold">Уроки курса <span className="ml-2 text-sm font-normal text-muted">{total}</span></summary>
+          <p className="mt-2 text-xs text-muted">Можно смотреть в любом порядке</p>
+          <ol className="mt-4 space-y-1 lg:max-h-[65vh] lg:overflow-y-auto">
+            {data.curriculum.map((item, i) => <li key={item.id}><Link href={`/lesson/${item.id}`} aria-current={item.id === lesson.id ? "page" : undefined} className={`flex items-start gap-3 rounded-lg p-3 text-sm ${item.id === lesson.id ? "bg-gold/10 text-gold" : "text-muted hover:bg-raised hover:text-text"}`}><span className="shrink-0 font-mono text-xs">{String(i + 1).padStart(2, "0")}</span><span className="break-words">{item.title}</span></Link></li>)}
+          </ol>
+        </details>
+      </aside>
     </div>
   );
 }

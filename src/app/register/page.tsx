@@ -31,7 +31,7 @@ export default async function RegisterPage() {
           <div>
             <h1 className="font-display text-2xl font-extrabold tracking-[0.08em]">OQU</h1>
             <p className="mt-1 text-sm text-muted">
-              Создайте аккаунт — бесплатные курсы откроются сразу
+              Создайте аккаунт. После оплаты администратор откроет выбранный курс.
             </p>
           </div>
         </div>

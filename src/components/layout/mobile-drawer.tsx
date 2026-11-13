@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,16 +13,27 @@ export function MobileDrawer({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    dialog.current?.querySelector<HTMLElement>("button")?.focus();
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Tab") {
+        const items = [...(dialog.current?.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),[tabindex="0"]') ?? [])];
+        const first = items[0], last = items.at(-1);
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
+      previous?.focus();
     };
   }, [open, onClose]);
 
@@ -39,7 +50,7 @@ export function MobileDrawer({
     >
       <button
         type="button"
-        tabIndex={open ? 0 : -1}
+        tabIndex={-1}
         aria-label="Закрыть меню"
         onClick={onClose}
         className={cn(
@@ -48,6 +59,7 @@ export function MobileDrawer({
         )}
       />
       <div
+        ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-label="Навигация"
@@ -60,7 +72,7 @@ export function MobileDrawer({
           type="button"
           onClick={onClose}
           aria-label="Закрыть меню"
-          className="absolute right-3 top-3 z-10 grid size-9 place-items-center rounded-lg border border-line bg-raised text-muted transition-colors hover:text-text"
+          className="absolute right-3 top-3 z-10 grid size-11 place-items-center rounded-lg border border-line bg-raised text-muted transition-colors hover:text-text"
         >
           <X className="size-5" />
         </button>

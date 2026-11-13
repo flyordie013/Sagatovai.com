@@ -23,11 +23,11 @@ export function Topbar({
       </button>
 
       <div className="mr-auto flex min-w-0 flex-col">
-        <h1 className="truncate text-[15px] font-extrabold tracking-tight sm:text-lg">
-          Привет, {user.name} 👋
-        </h1>
+        <p className="truncate text-[15px] font-semibold tracking-tight sm:text-lg">
+          {user.name}
+        </p>
         <p className="hidden truncate text-xs text-muted sm:block">
-          Готов собрать сегодня ещё один проект на AI?
+          Ваше обучение в OQU
         </p>
       </div>
 

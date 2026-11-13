@@ -18,6 +18,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Мои курсы", icon: GraduationCap },
   { href: "/achievements", label: "Достижения", icon: Trophy },
   { href: "/leaderboard", label: "Рейтинг", icon: BarChart3 },
-  { href: "/store", label: "Магазин", icon: Store },
+  { href: "/store", label: "Награды", icon: Store },
   { href: "/profile", label: "Профиль", icon: User },
 ];

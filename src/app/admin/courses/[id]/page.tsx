@@ -36,7 +36,9 @@ import {
   SubmitButton,
   ConfirmSubmit,
 } from "@/components/admin/form";
+import { SaveForm } from "@/components/admin/save-form";
 import { VideoUpload } from "@/components/admin/video-upload";
+import { MaterialManager } from "@/components/admin/material-manager";
 import { RichText } from "@/components/ui/rich-text";
 import { pluralize } from "@/lib/utils";
 
@@ -81,8 +83,7 @@ export default async function AdminCourseDetail({
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" />
           <p className="text-sm leading-relaxed text-text">
             Курс не опубликован: в нём нет ни одного урока. Добавьте хотя бы один урок —
-            иначе студенты увидят на витрине пустую карточку, а бесплатный курс ещё и
-            автоматически откроется каждому новому студенту навсегда.
+            чтобы студентам была доступна программа обучения. Доступ выдаётся администратором.
           </p>
         </Card>
       )}
@@ -155,7 +156,7 @@ export default async function AdminCourseDetail({
           <summary className="cursor-pointer select-none text-sm font-medium text-muted transition-colors hover:text-text">
             Настройки курса
           </summary>
-          <form action={updateCourse} className="mt-4 grid gap-4 sm:grid-cols-2">
+          <SaveForm action={updateCourse} className="mt-4 grid gap-4 sm:grid-cols-2">
             <input type="hidden" name="courseId" value={course.id} />
             <Field label="Название">
               <TextInput name="title" defaultValue={course.title} required />
@@ -180,15 +181,30 @@ export default async function AdminCourseDetail({
                 <TextArea name="description" defaultValue={course.description} />
               </Field>
             </div>
-            <Field label="Длительность (недель)">
+            <div className="sm:col-span-2 space-y-4 rounded-xl border border-line p-4">
+              <h3 className="font-semibold">Страница курса для покупателей</h3>
+              <p className="text-xs text-muted">Укажите реальные условия и результаты. Пустые блоки не показываются на сайте. Каждый пункт списка — с новой строки.</p>
+              {!course.outcomes && <p className="text-sm text-gold">Добавьте результаты обучения: посетителю будет проще понять пользу курса.</p>}
+              {([
+                ["audience", "Кому подходит", "Какие задачи и опыт у вашего ученика"],
+                ["outcomes", "Что получится после обучения", "Конкретные навыки и работы, которые есть в программе"],
+                ["requirements", "Что понадобится", "Уровень подготовки, техника и подписки на сервисы"],
+                ["included", "Что входит", "Материалы, практика, обратная связь — только то, что предоставляете"],
+                ["accessTerms", "Условия доступа", "Срок доступа, формат поддержки и способ оплаты"],
+                ["authorName", "Автор курса", "Укажите имя, если хотите представить автора на странице"],
+                ["authorBio", "Об авторе", "Реальный опыт и связь с темой курса"],
+              ] as const).map(([name, label, hint]) => <Field key={name} label={label} hint={hint}><TextArea name={name} defaultValue={course[name]} maxLength={name === "authorName" ? 150 : 5000} /></Field>)}
+              <Link className="inline-flex text-sm text-gold underline" href={course.isPublished ? `/courses/${course.slug}` : `/course/${course.slug}`} target="_blank">Посмотреть курс ↗</Link>
+            </div>
+            <Field label="Длительность программы" hint="Недель; 0 — не указана">
               <TextInput name="weeks" type="number" min="0" defaultValue={course.weeks} />
             </Field>
-            <Field label="Цена (₸)" hint="0 = бесплатно">
+            <Field label="Цена (₸)" hint="0 — стоимость по запросу на витрине; доступ выдаётся вручную">
               <TextInput name="price" type="number" min="0" step="1000" defaultValue={course.price} />
             </Field>
             {/* Empty field = no rating: the storefront hides the star at 0
                 rather than showing «★ 0». */}
-            <Field label="Рейтинг" hint="от 0 до 5, пусто — без звёздочки">
+            <Field label="Внутренняя оценка" hint="Не показывается как отзывы учеников">
               <TextInput
                 name="rating"
                 type="number"
@@ -211,7 +227,7 @@ export default async function AdminCourseDetail({
             <div className="sm:col-span-2">
               <SubmitButton>Сохранить настройки</SubmitButton>
             </div>
-          </form>
+          </SaveForm>
           <form action={deleteCourse} className="mt-4 border-t border-line pt-4">
             <input type="hidden" name="courseId" value={course.id} />
             <ConfirmSubmit
@@ -241,7 +257,7 @@ export default async function AdminCourseDetail({
         {modules.map((m, i) => (
           <Card key={m.id} className="p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <form action={updateModule} className="flex min-w-0 flex-1 items-center gap-2">
+              <form action={updateModule} className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:flex-1 sm:flex-nowrap">
                 <input type="hidden" name="moduleId" value={m.id} />
                 <input type="hidden" name="courseId" value={course.id} />
                 <span className="shrink-0 font-mono text-xs text-faint">Модуль {i + 1}</span>
@@ -321,7 +337,8 @@ export default async function AdminCourseDetail({
                         sizeBytes={l.videoSizeBytes}
                       />
                     </div>
-                    <form action={updateLesson} className="grid gap-4">
+                    <MaterialManager lessonId={l.id} lessonTitle={l.title} courseTitle={course.title} />
+                    <SaveForm action={updateLesson} className="grid gap-4">
                       <input type="hidden" name="lessonId" value={l.id} />
                       <input type="hidden" name="courseId" value={course.id} />
                       <Field label="Название урока">
@@ -377,7 +394,7 @@ export default async function AdminCourseDetail({
                       <div>
                         <SubmitButton>Сохранить урок</SubmitButton>
                       </div>
-                    </form>
+                    </SaveForm>
                     <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
                       {[
                         { dir: "up", Icon: ChevronUp, disabled: li === 0, label: "выше" },

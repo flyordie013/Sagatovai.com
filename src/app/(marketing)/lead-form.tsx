@@ -33,7 +33,7 @@ export function LeadForm({
 
   if (state.ok) {
     return (
-      <div className="rounded-2xl border border-teal/30 bg-teal/10 p-6 text-center">
+      <div role="status" className="rounded-2xl border border-teal/30 bg-teal/10 p-6 text-center">
         <CheckCircle2 className="mx-auto mb-2 size-8 text-teal" />
         <p className="font-display text-lg font-bold">Заявка отправлена</p>
         <p className="mt-1 text-sm text-muted">
@@ -44,14 +44,14 @@ export function LeadForm({
   }
 
   return (
-    <form action={action} className="space-y-3">
+    <form action={action} onReset={event => event.preventDefault()} className="space-y-3">
       {courseId ? <input type="hidden" name="courseId" value={courseId} /> : null}
 
       <div>
         <label htmlFor="lead-name" className="mb-1.5 block text-xs font-medium text-muted">
           Как вас зовут
         </label>
-        <input id="lead-name" name="name" required maxLength={120} placeholder="Данияр" className={inputBase} />
+        <input id="lead-name" name="name" autoComplete="name" required maxLength={120} placeholder="Ваше имя" className={inputBase} />
       </div>
 
       <div>
@@ -85,7 +85,7 @@ export function LeadForm({
       </div>
 
       {state.error && (
-        <p className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">
+        <p role="alert" className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">
           {state.error}
         </p>
       )}

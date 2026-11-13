@@ -21,11 +21,12 @@ export function AppShell({
 
   return (
     <div className="lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
+      <a href="#app-content" className="skip-link btn-primary">Перейти к содержанию</a>
       <Sidebar isStaff={isStaff} />
 
       <div className="flex min-h-dvh min-w-0 flex-col">
         <Topbar user={user} onMenu={() => setMenuOpen(true)} />
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <main id="app-content" className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
         <AppFooter />
       </div>
 

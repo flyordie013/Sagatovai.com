@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { MessageSquare, Phone, BookOpen } from "lucide-react";
-import { listLeads, LEADS_LIMIT } from "@/data/admin";
+import { listLeads } from "@/data/admin";
 import { setLeadStatus, deleteLead } from "../actions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,8 +24,10 @@ const STATUS: Record<string, { label: string; variant: "gold" | "teal" | "neutra
   lost: { label: "Отказ", variant: "neutral" },
 };
 
-export default async function AdminLeadsPage() {
-  const { rows, total, fresh } = await listLeads();
+export default async function AdminLeadsPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string; page?: string }> }) {
+  const filters = await searchParams;
+  const { rows, total, fresh, page, pages } = await listLeads({ ...filters, page: Number(filters.page) || 1 });
+  const pageHref = (p: number) => `/admin/leads?${new URLSearchParams({ q: filters.q || "", status: filters.status || "", page: String(p) })}`;
 
   return (
     <div className="mx-auto max-w-[900px] space-y-6">
@@ -46,19 +48,19 @@ export default async function AdminLeadsPage() {
           </Link>
           .
         </p>
-        {total > rows.length && (
-          <p className="mt-2 text-sm text-muted">
-            Показаны последние {formatNumber(LEADS_LIMIT)} обращений из{" "}
-            {formatNumber(total)}. Разберите их — и увидите следующие: ненужные
-            можно удалить кнопкой «Удалить».
-          </p>
-        )}
+        <p className="mt-3 text-sm text-muted">Найдено: {formatNumber(total)} · Страница {page} из {pages}</p>
       </header>
 
+      <form className="flex flex-wrap gap-3" action="/admin/leads">
+        <label className="min-w-48 flex-1 text-sm">Поиск по имени или контакту<input name="q" defaultValue={filters.q} maxLength={120} className="mt-2 w-full rounded-lg border border-line bg-raised p-3" /></label>
+        <label className="text-sm">Статус<select name="status" defaultValue={filters.status || ""} className="mt-2 block rounded-lg border border-line bg-raised p-3"><option value="">Все</option>{Object.entries(STATUS).map(([value, s]) => <option key={value} value={value}>{s.label}</option>)}</select></label>
+        <button className="btn-primary self-end">Найти</button><Link href="/admin/leads" className="btn-secondary self-end">Сбросить</Link>
+      </form>
+      {pages > 1 && <nav aria-label="Страницы заявок" className="flex gap-3">{page > 1 && <Link className="btn-secondary" href={pageHref(page - 1)}>Назад</Link>}{page < pages && <Link className="btn-secondary" href={pageHref(page + 1)}>Дальше</Link>}</nav>}
       {rows.length === 0 ? (
         <Card className="grid place-items-center px-6 py-14 text-center">
           <MessageSquare className="mb-3 size-8 text-faint" />
-          <p className="font-display font-bold">Пока нет лидов</p>
+          <p className="font-display font-bold">Обращений не найдено</p>
           <p className="mt-1 max-w-sm text-sm text-muted">
             Обращения с формы на публичной странице сайта появятся здесь.
           </p>
@@ -92,7 +94,7 @@ export default async function AdminLeadsPage() {
                           <input type="hidden" name="next" value={s.value} />
                           <button
                             type="submit"
-                            className="rounded-lg border border-line px-2.5 py-1 text-xs text-muted transition-colors hover:border-line-strong hover:text-text"
+                            className="min-h-11 rounded-lg border border-line px-2.5 py-2 text-xs text-muted transition-colors hover:border-line-strong hover:text-text"
                           >
                             {s.label}
                           </button>

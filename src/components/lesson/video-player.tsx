@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   Play,
   Pause,
@@ -69,6 +69,7 @@ export function VideoPlayer({
   onEnded,
   onError,
   onLoadedMetadata,
+  onPaused,
 }: {
   src: string;
   initialTime?: number;
@@ -77,6 +78,7 @@ export function VideoPlayer({
   onTick?: (video: HTMLVideoElement) => void;
   onEnded?: () => void;
   onError?: () => void;
+  onPaused?: (video: HTMLVideoElement) => void;
   /** Also fires again once a missing duration has been recovered. */
   onLoadedMetadata?: (video: HTMLVideoElement) => void;
 }) {
@@ -265,6 +267,39 @@ export function VideoPlayer({
     };
   }, []);
 
+  function handleMetadata(v: HTMLVideoElement) {
+          setDuration(Number.isFinite(v.duration) ? v.duration : 0);
+          setVolume(v.volume);
+          setMuted(v.muted);
+          if (!Number.isFinite(v.duration)) {
+            // No length in the file — recover it before anything else, so the
+            // timecode, the bar and seeking all work (resume happens after).
+            // Only while paused: on a slow connection the student can hit play
+            // before metadata arrives, and probing then would yank playback to
+            // the end of the file. `durationHint` covers that case instead.
+            if (probe.current.state === "idle" && v.paused) startProbe(v);
+          } else if (!resumed.current && initialTime > 1 && initialTime < v.duration - 2) {
+            // Resume where the student stopped (never past the very end).
+            v.currentTime = initialTime;
+          }
+          resumed.current = true;
+          setCurrent(v.currentTime);
+          // iOS only admits it can play fullscreen once metadata is in.
+          detectFullscreen();
+          onLoadedMetadata?.(v);
+  }
+
+  // A cached video may emit loadedmetadata before React hydrates the page.
+  // Catch up once after mount so a hard reload resumes as reliably as client navigation.
+  const catchUpMetadata = useEffectEvent(() => {
+    const v = videoRef.current;
+    if (v && v.readyState >= 1 && !resumed.current) handleMetadata(v);
+  });
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => catchUpMetadata());
+    return () => cancelAnimationFrame(frame);
+  }, [src]);
+
   /**
    * Touch: a double tap on either half seeks ±10s (as on YouTube), a lone tap
    * toggles playback — but only once the double-tap window has passed, so the
@@ -398,9 +433,10 @@ export function VideoPlayer({
           setStarted(true);
           showUi();
         }}
-        onPause={() => {
+        onPause={(e) => {
           setPlaying(false);
           setUiVisible(true);
+          if (probe.current.state !== "running") onPaused?.(e.currentTarget);
         }}
         onWaiting={() => setWaiting(true)}
         onPlaying={() => setWaiting(false)}
@@ -413,27 +449,7 @@ export function VideoPlayer({
           // Fallback for browsers that resolve the length without a durationchange.
           if (Number.isFinite(e.currentTarget.duration)) endProbe(e.currentTarget);
         }}
-        onLoadedMetadata={(e) => {
-          const v = e.currentTarget;
-          setDuration(Number.isFinite(v.duration) ? v.duration : 0);
-          setVolume(v.volume);
-          setMuted(v.muted);
-          if (!Number.isFinite(v.duration)) {
-            // No length in the file — recover it before anything else, so the
-            // timecode, the bar and seeking all work (resume happens after).
-            // Only while paused: on a slow connection the student can hit play
-            // before metadata arrives, and probing then would yank playback to
-            // the end of the file. `durationHint` covers that case instead.
-            if (probe.current.state === "idle" && v.paused) startProbe(v);
-          } else if (!resumed.current && initialTime > 1 && initialTime < v.duration - 2) {
-            // Resume where the student stopped (never past the very end).
-            v.currentTime = initialTime;
-          }
-          resumed.current = true;
-          // iOS only admits it can play fullscreen once metadata is in.
-          detectFullscreen();
-          onLoadedMetadata?.(v);
-        }}
+        onLoadedMetadata={(e) => handleMetadata(e.currentTarget)}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
           // While probing, currentTime sits at the far end of the file: don't

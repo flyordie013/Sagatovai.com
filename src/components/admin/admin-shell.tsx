@@ -19,6 +19,7 @@ export function AdminShell({
 
   return (
     <div className="lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
+      <a className="skip-link btn-primary" href="#admin-content">Перейти к содержанию</a>
       <aside className="sticky top-0 hidden h-dvh w-full border-r border-line bg-gradient-to-b from-surface/60 to-ink/20 lg:block">
         <AdminSidebarContent counts={counts} />
       </aside>
@@ -42,7 +43,7 @@ export function AdminShell({
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <main id="admin-content" className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>
 
       <MobileDrawer open={menuOpen} onClose={() => setMenuOpen(false)}>

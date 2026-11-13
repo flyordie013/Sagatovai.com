@@ -165,7 +165,7 @@ async function init(): Promise<DB> {
   const { PGlite } = await import("@electric-sql/pglite");
   const { drizzle: drizzlePglite } = await import("drizzle-orm/pglite");
   const { seedIfEmpty } = await import("./seed");
-  const client = new PGlite(path.join(process.cwd(), ".pglite"));
+  const client = new PGlite(process.env.PGLITE_DIR || path.join(process.cwd(), ".pglite"));
   await runMigrations(client);
   const db = drizzlePglite(client, { schema });
   await seedIfEmpty(db);

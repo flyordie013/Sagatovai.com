@@ -66,11 +66,11 @@ export async function completeLesson(lessonId: number): Promise<CompleteResult> 
   //    double-submit / race can never grant rewards twice.
   await db
     .insert(lessonProgress)
-    .values({ userId, lessonId, watchedPct: 100 })
+    .values({ userId, lessonId })
     .onConflictDoNothing({ target: [lessonProgress.userId, lessonProgress.lessonId] });
   const claimed = await db
     .update(lessonProgress)
-    .set({ watchedPct: 100, completed: true, completedAt: now, updatedAt: now })
+    .set({ completed: true, completedAt: now, updatedAt: now })
     .where(
       and(
         eq(lessonProgress.userId, userId),

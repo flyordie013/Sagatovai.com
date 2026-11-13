@@ -78,6 +78,11 @@ export async function requireUser(): Promise<Session> {
 }
 
 /** Require staff (admin/superadmin). Builds on the DB-backed requireUser. */
+export async function getAuthenticatedSession(): Promise<Session | null> {
+  const result = await authenticate();
+  return typeof result === "string" ? null : result;
+}
+
 export async function requireStaff(): Promise<Session> {
   const session = await requireUser();
   if (!isStaff(session.role)) redirect("/dashboard");

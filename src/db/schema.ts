@@ -91,6 +91,13 @@ export const courses = pgTable("courses", {
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
   icon: courseIconEnum("icon").notNull().default("sparkles"),
+  audience: text("audience").notNull().default(""),
+  outcomes: text("outcomes").notNull().default(""),
+  requirements: text("requirements").notNull().default(""),
+  included: text("included").notNull().default(""),
+  accessTerms: text("access_terms").notNull().default(""),
+  authorName: text("author_name").notNull().default(""),
+  authorBio: text("author_bio").notNull().default(""),
   weeks: integer("weeks").notNull().default(0),
   rating: real("rating").notNull().default(0),
   flagship: boolean("flagship").notNull().default(false),
@@ -139,6 +146,18 @@ export const lessons = pgTable(
 );
 
 /** Enrollment grants a user access to a course with a given access tier. */
+export const lessonMaterials = pgTable("lesson_materials", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  lessonId: integer("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  filename: text("filename").notNull(),
+  storageKey: text("storage_key").notNull().unique(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  orderIndex: integer("order_index").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("lesson_materials_lesson_idx").on(t.lessonId)]);
+
 export const enrollments = pgTable(
   "enrollments",
   {
@@ -167,6 +186,8 @@ export const lessonProgress = pgTable(
       .notNull()
       .references(() => lessons.id, { onDelete: "cascade" }),
     watchedPct: integer("watched_pct").notNull().default(0),
+    lastPositionSec: integer("last_position_sec").notNull().default(0),
+    positionUpdatedAt: timestamp("position_updated_at", { withTimezone: true }),
     completed: boolean("completed").notNull().default(false),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

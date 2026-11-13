@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gt, inArray, isNull, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   courses,
@@ -153,7 +153,10 @@ export async function getCourseForStudent(slug: string, userId: string, staff = 
     byModule.set(l.moduleId, list);
   }
 
-  const nextLesson = owns ? ordered.find((l) => !done.has(l.id)) : undefined;
+  const [recent] = owns && ordered.length ? await db.select({ id: lessonProgress.lessonId })
+    .from(lessonProgress).where(and(eq(lessonProgress.userId, userId), inArray(lessonProgress.lessonId, ordered.map(l => l.id)), isNotNull(lessonProgress.positionUpdatedAt)))
+    .orderBy(desc(lessonProgress.positionUpdatedAt)).limit(1) : [];
+  const nextLesson = owns ? recent ?? ordered.find((l) => !done.has(l.id)) ?? ordered[0] : undefined;
 
   return {
     course,
@@ -249,7 +252,7 @@ export async function getLessonForStudent(lessonId: number, userId: string, staf
   const ordered = await orderedLessons(db, course.id);
   const index = ordered.findIndex((l) => l.id === lessonId);
   const [progress] = await db
-    .select({ watchedPct: lessonProgress.watchedPct, completed: lessonProgress.completed })
+    .select({ watchedPct: lessonProgress.watchedPct, completed: lessonProgress.completed, lastPositionSec: lessonProgress.lastPositionSec })
     .from(lessonProgress)
     .where(and(eq(lessonProgress.userId, userId), eq(lessonProgress.lessonId, lessonId)))
     .limit(1);
@@ -266,6 +269,8 @@ export async function getLessonForStudent(lessonId: number, userId: string, staf
     canView,
     completed: progress?.completed ?? false,
     watchedPct: progress?.watchedPct ?? 0,
+    lastPositionSec: progress?.lastPositionSec ?? 0,
+    curriculum: ordered,
     position: index + 1,
     total: ordered.length,
     prevLessonId: index > 0 ? ordered[index - 1].id : null,

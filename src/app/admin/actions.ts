@@ -12,6 +12,7 @@ import {
   lessons,
   enrollments,
   lessonProgress,
+  lessonMaterials,
   payments,
   profiles,
   missions,
@@ -25,6 +26,7 @@ import {
 import { requireStaff } from "@/lib/session";
 import { hashPassword } from "@/lib/password";
 import { provisionNewStudent } from "@/lib/provision";
+import { removeMaterial } from "@/lib/material-storage";
 import { deleteVideo } from "@/lib/storage";
 import { levelForXp, rankForLevel } from "@/lib/leveling";
 import { sendEmail, emailLayout, escapeHtml } from "@/lib/email";
@@ -134,6 +136,13 @@ export async function createCourse(formData: FormData): Promise<void> {
       slug,
       title,
       description: str(formData, "description"),
+      audience: str(formData, "audience").slice(0, 5000),
+      outcomes: str(formData, "outcomes").slice(0, 5000),
+      requirements: str(formData, "requirements").slice(0, 5000),
+      included: str(formData, "included").slice(0, 5000),
+      accessTerms: str(formData, "accessTerms").slice(0, 5000),
+      authorName: str(formData, "authorName").slice(0, 150),
+      authorBio: str(formData, "authorBio").slice(0, 5000),
       icon: ((str(formData, "icon") || "sparkles") as Icon),
       weeks: int(formData, "weeks"),
       price: int(formData, "price"),
@@ -189,6 +198,9 @@ export async function updateCourse(formData: FormData): Promise<void> {
       title,
       ...(slug ? { slug } : {}),
       description: str(formData, "description"),
+      audience: str(formData, "audience").slice(0, 5000), outcomes: str(formData, "outcomes").slice(0, 5000),
+      requirements: str(formData, "requirements").slice(0, 5000), included: str(formData, "included").slice(0, 5000),
+      accessTerms: str(formData, "accessTerms").slice(0, 5000), authorName: str(formData, "authorName").slice(0, 150), authorBio: str(formData, "authorBio").slice(0, 5000),
       icon: ((str(formData, "icon") || "sparkles") as Icon),
       weeks: int(formData, "weeks"),
       price: int(formData, "price"),
@@ -276,7 +288,10 @@ export async function deleteCourse(formData: FormData): Promise<void> {
       .from(lessons)
       .innerJoin(modules, eq(lessons.moduleId, modules.id))
       .where(eq(modules.courseId, id));
+    const attachments = await db.select({ key: lessonMaterials.storageKey }).from(lessonMaterials)
+      .innerJoin(lessons, eq(lessonMaterials.lessonId, lessons.id)).innerJoin(modules, eq(lessons.moduleId, modules.id)).where(eq(modules.courseId, id));
     await db.delete(courses).where(eq(courses.id, id));
+    await Promise.all(attachments.map(f => removeMaterial(f.key)));
     await purgeVideos(keys.map((k) => k.videoKey));
   }
 
@@ -359,7 +374,10 @@ export async function deleteModule(formData: FormData): Promise<void> {
     .select({ videoKey: lessons.videoKey })
     .from(lessons)
     .where(eq(lessons.moduleId, id));
+  const attachments = await db.select({ key: lessonMaterials.storageKey }).from(lessonMaterials)
+    .innerJoin(lessons, eq(lessonMaterials.lessonId, lessons.id)).where(eq(lessons.moduleId, id));
   await db.delete(modules).where(eq(modules.id, id)); // cascade removes lessons
+  await Promise.all(attachments.map(f => removeMaterial(f.key)));
   await purgeVideos(keys.map((k) => k.videoKey));
   revalidateCourse(courseId);
 }
@@ -462,7 +480,9 @@ export async function deleteLesson(formData: FormData): Promise<void> {
     .from(lessons)
     .where(eq(lessons.id, id))
     .limit(1);
+  const attachments = await db.select({ key: lessonMaterials.storageKey }).from(lessonMaterials).where(eq(lessonMaterials.lessonId, id));
   await db.delete(lessons).where(eq(lessons.id, id));
+  await Promise.all(attachments.map(f => removeMaterial(f.key)));
   await purgeVideos([lesson?.videoKey ?? null]); // free the uploaded file
   revalidateCourse(courseId);
 }

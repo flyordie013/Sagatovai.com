@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   courses,
@@ -128,7 +128,17 @@ export async function getDashboard(): Promise<DashboardData> {
 
   const achievementsUnlocked = await countUnlockedAchievements(uid);
 
+  const [resume] = await db.select({ id: lessons.id, title: lessons.title, courseTitle: courses.title })
+    .from(lessonProgress)
+    .innerJoin(lessons, eq(lessonProgress.lessonId, lessons.id))
+    .innerJoin(modules, eq(lessons.moduleId, modules.id))
+    .innerJoin(courses, eq(modules.courseId, courses.id))
+    .innerJoin(enrollments, and(eq(enrollments.courseId, courses.id), eq(enrollments.userId, uid)))
+    .where(and(eq(lessonProgress.userId, uid), eq(enrollments.accessType, "full"), isNotNull(lessonProgress.positionUpdatedAt)))
+    .orderBy(desc(lessonProgress.positionUpdatedAt)).limit(1);
+
   return {
+    resume: resume ?? null,
     user,
     courses: courseList,
     mission,

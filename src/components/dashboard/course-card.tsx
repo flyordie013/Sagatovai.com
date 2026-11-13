@@ -3,7 +3,6 @@ import {
   Sparkles,
   Bot,
   Code2,
-  Star,
   Clock,
   PlayCircle,
   Lock,
@@ -24,12 +23,11 @@ const ICONS: Record<CourseIcon, LucideIcon> = {
 
 export function CourseCard({ course }: { course: CourseSummary }) {
   const locked = course.access === "locked";
-  const started = course.progress > 0;
   const done = course.progress >= 100 && course.lessons > 0;
   const Icon = ICONS[course.icon];
 
   return (
-    <article className="group relative flex flex-col rounded-2xl border border-line bg-gradient-to-b from-raised to-surface p-5 shadow-card ring-inset-hair transition duration-300 ease-[var(--ease-soft)] hover:-translate-y-0.5 hover:border-line-strong">
+    <article className="group relative flex flex-col rounded-2xl border border-line bg-surface p-5 shadow-card ring-inset-hair transition duration-300 ease-[var(--ease-soft)] hover:border-line-strong">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div
           className={cn(
@@ -55,28 +53,21 @@ export function CourseCard({ course }: { course: CourseSummary }) {
       <p className="mt-1.5 text-sm text-muted">{course.description}</p>
 
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs text-muted">
-        <span className="inline-flex items-center gap-1.5">
+        {course.weeks > 0 && <span className="inline-flex items-center gap-1.5">
           <Clock className="size-3.5" />
           {course.weeks} {pluralize(course.weeks, ["неделя", "недели", "недель"])}
-        </span>
+        </span>}
         <span className="inline-flex items-center gap-1.5">
           <PlayCircle className="size-3.5" />
           {course.lessons} {pluralize(course.lessons, ["урок", "урока", "уроков"])}
         </span>
-        {/* No ratings yet → rating is 0; «0.0» would look like a bad score. */}
-        {course.rating > 0 && (
-          <span className="inline-flex items-center gap-1.5 text-gold">
-            <Star className="size-3.5 fill-gold" />
-            <span className="nums text-text">{course.rating.toFixed(1)}</span>
-          </span>
-        )}
       </div>
 
       <div className="mt-4">
         {locked ? (
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted">Доступ</span>
-            <span className="font-medium text-text">Платный</span>
+            <span className="font-medium text-text">По заявке</span>
           </div>
         ) : (
           <>
@@ -104,7 +95,7 @@ export function CourseCard({ course }: { course: CourseSummary }) {
         {locked ? (
           <>
             <Lock className="size-4" />
-            Открыть
+            О курсе
           </>
         ) : done ? (
           <>
@@ -113,7 +104,7 @@ export function CourseCard({ course }: { course: CourseSummary }) {
           </>
         ) : (
           <>
-            {started ? "Продолжить" : "Начать"}
+            Открыть курс
             <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
           </>
         )}

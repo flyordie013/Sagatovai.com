@@ -36,6 +36,7 @@ export interface Mission {
 }
 
 export interface DashboardData {
+  resume: { id: number; title: string; courseTitle: string } | null;
   user: UserSummary;
   courses: CourseSummary[];
   /** null when the student has no active unfinished mission. */

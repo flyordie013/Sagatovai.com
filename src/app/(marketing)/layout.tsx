@@ -13,6 +13,7 @@ export default async function MarketingLayout({ children }: { children: ReactNod
 
   return (
     <div className="flex min-h-dvh flex-col">
+      <a href="#main-content" className="skip-link btn-primary">Перейти к содержанию</a>
       <header className="sticky top-0 z-30 border-b border-line bg-ink/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1120px] items-center gap-4 px-4 py-3.5 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
@@ -22,10 +23,12 @@ export default async function MarketingLayout({ children }: { children: ReactNod
             <span className="font-display text-lg font-extrabold tracking-[0.08em]">OQU</span>
           </Link>
 
-          <nav className="ml-auto flex items-center gap-2">
+          <nav aria-label="Основная навигация" className="ml-auto flex items-center gap-2">
+            <Link href="/#format" className="hidden px-3 py-2 text-sm text-muted hover:text-text md:block">Как учиться</Link>
+            <Link href="/#questions" className="hidden px-3 py-2 text-sm text-muted hover:text-text md:block">Вопросы</Link>
             <Link
               href="/courses"
-              className="hidden rounded-xl px-3 py-2 text-sm text-muted transition-colors hover:text-text sm:block"
+              className="rounded-xl px-2 py-2 text-sm text-muted transition-colors hover:text-text sm:px-3"
             >
               Курсы
             </Link>
@@ -47,7 +50,7 @@ export default async function MarketingLayout({ children }: { children: ReactNod
                 </Link>
                 <Link
                   href="/register"
-                  className="rounded-xl bg-gold px-4 py-2 text-sm font-semibold text-gold-ink transition-colors hover:bg-gold-soft"
+                  className="hidden rounded-xl border border-line-strong px-4 py-2 text-sm font-semibold text-text transition-colors hover:bg-raised sm:block"
                 >
                   Регистрация
                 </Link>
@@ -57,7 +60,7 @@ export default async function MarketingLayout({ children }: { children: ReactNod
         </div>
       </header>
 
-      <main className="flex-1">{children}</main>
+      <main id="main-content" className="flex-1">{children}</main>
 
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-[1120px] flex-col gap-2 px-4 py-8 text-sm text-faint sm:flex-row sm:items-center sm:px-6">

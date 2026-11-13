@@ -20,7 +20,7 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { cn, formatNumber } from "@/lib/utils";
 import { ClaimButton } from "./claim-button";
 
-export const metadata = { title: "Магазин" };
+export const metadata = { title: "Награды за обучение" };
 
 /** lucide icon by the item's `icon` string, with a category-based fallback. */
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -164,7 +164,7 @@ export default async function StorePage() {
     <div className="mx-auto max-w-[1480px] space-y-6">
       <header className="space-y-1.5">
         <h1 className="font-display text-2xl font-extrabold sm:text-3xl">
-          Магазин
+          Награды за обучение
         </h1>
         <p className="text-muted">
           Разблокируйте награды за накопленный XP

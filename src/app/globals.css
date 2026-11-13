@@ -37,9 +37,9 @@
   --color-success: #4ec98a;
 
   /* elevation */
-  --shadow-card: 0 18px 40px -28px rgba(0, 0, 0, 0.95);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
   --shadow-pop: 0 24px 60px -24px rgba(0, 0, 0, 0.95);
-  --shadow-glow: 0 0 28px -6px rgba(245, 165, 36, 0.5);
+  --shadow-glow: 0 2px 3px rgba(0, 0, 0, 0.12);
 
   /* motion */
   --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
@@ -56,11 +56,7 @@
     min-height: 100dvh;
     color: var(--color-text);
     font-family: var(--font-sans);
-    background:
-      radial-gradient(120% 90% at 80% -10%, rgba(245, 165, 36, 0.1), transparent 46%),
-      radial-gradient(90% 70% at -8% 2%, rgba(45, 212, 191, 0.05), transparent 52%),
-      var(--color-ink);
-    background-attachment: fixed;
+    background: var(--color-ink);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -90,6 +86,28 @@
     background: #3d3f4b;
     background-clip: content-box;
   }
+}
+
+@layer components {
+  .btn-primary, .btn-secondary, .btn-icon {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+    min-height: 44px; border-radius: 10px; padding: 0.65rem 1rem;
+    font-size: 0.875rem; line-height: 1.4; font-weight: 650; cursor: pointer;
+    transition: background-color 150ms, border-color 150ms;
+  }
+  .btn-primary { background: var(--color-gold); color: var(--color-gold-ink); border: 1px solid transparent; }
+  .btn-primary:hover { background: var(--color-gold-soft); }
+  .btn-secondary, .btn-icon { background: transparent; color: var(--color-text); border: 1px solid var(--color-line-strong); }
+  .btn-secondary:hover, .btn-icon:hover { background: var(--color-raised); border-color: var(--color-muted); }
+  .btn-icon { width: 44px; padding: 0.5rem; }
+  .btn-primary:disabled, .btn-secondary:disabled, .btn-icon:disabled { opacity: 0.5; cursor: not-allowed; }
+  .eyebrow { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.17em; text-transform: uppercase; color: var(--color-gold); }
+  .editorial { font-family: Georgia, "Times New Roman", serif; font-weight: 400; letter-spacing: -0.04em; }
+  .section-title { font-size: clamp(1.8rem, 3.6vw, 3rem); line-height: 1.14; font-weight: 650; letter-spacing: -0.035em; }
+  .page-section { margin-inline: auto; width: 100%; max-width: 1180px; padding: 4.5rem 1rem; }
+  @media (min-width: 640px) { .page-section { padding: 6rem 1.5rem; } }
+  .skip-link { position: fixed; z-index: 100; top: 0.5rem; left: 0.5rem; transform: translateY(-200%); }
+  .skip-link:focus { transform: translateY(0); }
 }
 
 @layer utilities {

@@ -78,12 +78,13 @@ services:
       LEGAL_REFUND_DAYS: ${LEGAL_REFUND_DAYS}
       LEGAL_REFUND_PROGRESS_PERCENT: ${LEGAL_REFUND_PROGRESS_PERCENT}
       LEGAL_REFUND_PAYOUT_DAYS: ${LEGAL_REFUND_PAYOUT_DAYS}
+      MAX_MATERIAL_MB: ${MAX_MATERIAL_MB:-50}
       MAX_VIDEO_MB: ${MAX_VIDEO_MB}
       # Free space the uploader refuses to eat into (MB). Postgres shares this
       # disk: filling it to the last byte takes the whole site down.
       MIN_FREE_DISK_MB: ${MIN_FREE_DISK_MB}
     volumes:
-      # Uploaded videos persist across redeploys.
+      # Uploaded videos and lesson materials persist across redeploys.
       - videos:/app/storage
     ports:
       # Loopback ONLY — the reverse proxy (Caddy, see DEPLOY.md) terminates

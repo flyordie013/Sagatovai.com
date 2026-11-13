@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { requireStaff } from "@/lib/session";
 import { effectiveStreak } from "@/lib/streak";
@@ -184,6 +184,8 @@ export interface LeadsList {
   total: number;
   /** Untouched («new») leads across the whole table, not just the shown page. */
   fresh: number;
+  page: number;
+  pages: number;
 }
 
 /**
@@ -192,45 +194,27 @@ export interface LeadsList {
  * internet — an unbounded query would make /admin/leads impossible to open
  * exactly when the owner needs to clean it up.
  */
-export const LEADS_LIMIT = 200;
+export const LEADS_LIMIT = 30;
 
 /** Leads captured from the public storefront (visitors without an account). */
-export async function listLeads(): Promise<LeadsList> {
+export async function listLeads(options: { page?: number; q?: string; status?: string } = {}): Promise<LeadsList> {
   await requireStaff();
   const db = await getDb();
-
-  const [rows, [totals]] = await Promise.all([
-    db
-      .select({
-        id: leads.id,
-        name: leads.name,
-        contact: leads.contact,
-        comment: leads.comment,
-        status: leads.status,
-        courseTitle: courses.title,
-        createdAt: leads.createdAt,
-      })
-      .from(leads)
-      .leftJoin(courses, eq(leads.courseId, courses.id))
-      // `id` tiebreaker → a stable order when a spam script inserts many rows
-      // within the same second.
-      .orderBy(desc(leads.createdAt), desc(leads.id))
-      .limit(LEADS_LIMIT),
-    // Counted over the whole table: the header must not report "3 новых" just
-    // because the rest of them fell outside the limit.
-    db
-      .select({
-        total: countInt,
-        fresh: sql<number>`count(*) filter (where ${leads.status} = 'new')::int`,
-      })
-      .from(leads),
+  const status = ["new", "contacted", "won", "lost"].includes(options.status || "") ? options.status as LeadRow["status"] : undefined;
+  const q = typeof options.q === "string" ? options.q.trim().slice(0, 120) : "";
+  const where = and(status ? eq(leads.status, status) : undefined,
+    q ? or(ilike(leads.name, `%${q}%`), ilike(leads.contact, `%${q}%`)) : undefined);
+  const [[count], [newCount]] = await Promise.all([
+    db.select({ total: countInt }).from(leads).where(where),
+    db.select({ total: countInt }).from(leads).where(eq(leads.status, "new")),
   ]);
-
-  return {
-    rows: rows as LeadRow[],
-    total: totals?.total ?? 0,
-    fresh: totals?.fresh ?? 0,
-  };
+  const total = count?.total ?? 0, pages = Math.max(1, Math.ceil(total / LEADS_LIMIT));
+  const page = Math.min(pages, Math.max(1, Math.floor(options.page || 1)));
+  const rows = await db.select({ id: leads.id, name: leads.name, contact: leads.contact, comment: leads.comment,
+    status: leads.status, courseTitle: courses.title, createdAt: leads.createdAt }).from(leads)
+    .leftJoin(courses, eq(leads.courseId, courses.id)).where(where)
+    .orderBy(desc(leads.createdAt), desc(leads.id)).limit(LEADS_LIMIT).offset((page - 1) * LEADS_LIMIT);
+  return { rows, total, fresh: newCount?.total ?? 0, page, pages };
 }
 
 /** Everything the gamification admin screen needs, in one call. */

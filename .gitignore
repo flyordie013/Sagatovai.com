@@ -47,3 +47,7 @@ next-env.d.ts
 
 # uploaded media (video files live on disk, never in git)
 /storage/
+
+# Local QA artifacts
+/output/
+/.playwright-cli/

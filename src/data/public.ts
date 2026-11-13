@@ -15,6 +15,13 @@ export interface PublicCourse {
   slug: string;
   title: string;
   description: string;
+  audience: string;
+  outcomes: string;
+  requirements: string;
+  included: string;
+  accessTerms: string;
+  authorName: string;
+  authorBio: string;
   icon: CourseIcon;
   weeks: number;
   rating: number;
@@ -54,6 +61,8 @@ export async function listPublicCourses(): Promise<PublicCourse[]> {
       slug: courses.slug,
       title: courses.title,
       description: courses.description,
+      audience: courses.audience, outcomes: courses.outcomes, requirements: courses.requirements,
+      included: courses.included, accessTerms: courses.accessTerms, authorName: courses.authorName, authorBio: courses.authorBio,
       icon: courses.icon,
       weeks: courses.weeks,
       rating: courses.rating,
@@ -80,6 +89,8 @@ export async function getPublicCourse(slug: string): Promise<PublicCourseDetail 
       slug: courses.slug,
       title: courses.title,
       description: courses.description,
+      audience: courses.audience, outcomes: courses.outcomes, requirements: courses.requirements,
+      included: courses.included, accessTerms: courses.accessTerms, authorName: courses.authorName, authorBio: courses.authorBio,
       icon: courses.icon,
       weeks: courses.weeks,
       rating: courses.rating,
